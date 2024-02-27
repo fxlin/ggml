@@ -173,7 +173,7 @@ enum ggml_metal_kernel_type {
 };
 
 struct ggml_metal_context {
-    int n_cb;
+    int n_cb;       // xzl: # of command buffers?
 
     id<MTLDevice>       device;
     id<MTLCommandQueue> queue;
@@ -722,6 +722,7 @@ static bool ggml_metal_supports_op(const struct ggml_metal_context * ctx, const 
     }
 }
 
+// xzl: the main entry...
 static bool ggml_metal_graph_compute(
         struct ggml_metal_context * ctx,
                struct ggml_cgraph * gf) {
@@ -773,6 +774,7 @@ static bool ggml_metal_graph_compute(
         id<MTLCommandBuffer> command_buffer  = command_buffers[cb_idx];
         id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoderWithDescriptor: edesc];
 
+        // xzl: dispatch a range of graph nodes to a command buffer... (cb)
         const int node_start =                                      (cb_idx + 0) * n_nodes_per_cb;
         const int node_end   = MIN((cb_idx == n_cb - 1) ? n_nodes : (cb_idx + 1) * n_nodes_per_cb, n_nodes);
 

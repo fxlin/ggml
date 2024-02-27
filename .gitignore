@@ -39,3 +39,10 @@ __pycache__/
 # Model files
 ggml-model-f16.bin
 *.bat
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+*.xcuserstate
+.swiftpm/xcode/xcuserdata/felixlin.xcuserdatad/xcschemes/xcschememanagement.plist
+ggml.xcworkspace/contents.xcworkspacedata
+ggml.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+ggml.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+ggml.xcworkspace/xcuserdata/felixlin.xcuserdatad/WorkspaceSettings.xcsettings
