@@ -2676,6 +2676,7 @@ GGML_CALL static bool ggml_backend_metal_supports_op(ggml_backend_t backend, con
     return ggml_metal_supports_op(metal_ctx, op);
 }
 
+// xzl: register the metal backend...
 static struct ggml_backend_i ggml_backend_metal_i = {
     /* .get_name                = */ ggml_backend_metal_name,
     /* .free                    = */ ggml_backend_metal_free,
