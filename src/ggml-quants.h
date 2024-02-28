@@ -67,6 +67,10 @@ static_assert(sizeof(block_q8_1) == 2*sizeof(float) + QK8_1, "wrong q8_1 block s
 #define K_SCALE_SIZE 12
 #endif
 
+// xzl: details cf https://github.com/ggerganov/llama.cpp/pull/1684
+//  are these cpu centric? (superblock, blocks, 16 weights per block, etc...)
+
+
 // 2-bit quantization
 // weight is represented as x = a * q + b
 // 16 blocks of 16 elements each

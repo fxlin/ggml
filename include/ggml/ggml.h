@@ -327,6 +327,8 @@ extern "C" {
     struct ggml_object;
     struct ggml_context;
 
+        // xzl: cf: https://github.com/ggerganov/llama.cpp/pull/1684 regarding quant details
+
     enum ggml_type {
         GGML_TYPE_F32  = 0,
         GGML_TYPE_F16  = 1,

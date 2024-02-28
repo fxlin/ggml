@@ -355,6 +355,7 @@ static size_t ggml_backend_registry_count = 0;
 
 GGML_CALL static ggml_backend_t ggml_backend_reg_cpu_init(const char * params, void * user_data);
 
+// xzl: all backends regsitered here.....
 GGML_CALL static void ggml_backend_registry_init(void) {
     static bool initialized = false;
 
@@ -1581,6 +1582,7 @@ bool ggml_backend_sched_reserve(ggml_backend_sched_t sched, struct ggml_cgraph *
     return true;
 }
 
+// xzl: the entry to graph scheduler? (assign backends to subgraphs...)
 bool ggml_backend_sched_graph_compute(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
     GGML_ASSERT((int)sched->hash_set.size >= graph->n_nodes + GGML_MAX_SPLITS*GGML_MAX_SPLIT_INPUTS);
 

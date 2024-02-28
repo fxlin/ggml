@@ -112,6 +112,7 @@ typedef void * thread_ret_t;
 
 #include <sys/wait.h>
 
+// xzl: can be useful
 void ggml_print_backtrace(void) {
     /*
     #include <execinfo.h>
@@ -15326,7 +15327,7 @@ static void ggml_compute_forward_cross_entropy_loss_back(
 }
 
 /////////////////////////////////
-
+// xzl: main entry...
 static void ggml_compute_forward(struct ggml_compute_params * params, struct ggml_tensor * tensor) {
     GGML_ASSERT(params);
 
@@ -15361,7 +15362,7 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
         return;
     }
 #endif // GGML_USE_SYCL
-    switch (tensor->op) {
+    switch (tensor->op) {  // xzl: main dispatch of tensor ops.... 
         case GGML_OP_DUP:
             {
                 ggml_compute_forward_dup(params, tensor);
@@ -17437,6 +17438,7 @@ static void ggml_graph_compute_thread_sync_task(int * task_phase, struct ggml_co
     }
 }
 
+// xzl: the graph level entry... (exec in work therads... thread pool. (clearly cpu!))
 static thread_ret_t ggml_graph_compute_thread(void * data) {
     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
 
@@ -17771,6 +17773,7 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
     return cplan;
 }
 
+// xzl: main entry for graph level 
 int ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
     {
         GGML_ASSERT(cplan);
@@ -17816,7 +17819,7 @@ int ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
                 .ith = j,
                 .shared = &state_shared,
             };
-
+            // xzl: worker threads, and dispatch graph to them
             const int rc = ggml_thread_create(&workers[j].thrd, NULL, ggml_graph_compute_thread, &workers[j]);
             GGML_ASSERT(rc == 0);
             UNUSED(rc);
@@ -18624,7 +18627,7 @@ static void ggml_opt_acc_grad(int np, struct ggml_tensor * const ps[], float * g
 // Using AdamW - ref: https://arxiv.org/pdf/1711.05101v3.pdf
 //
 // (Original Adam - ref: https://arxiv.org/pdf/1412.6980.pdf)
-//
+// xzl: training entry?
 
 static enum ggml_opt_result ggml_opt_adam(
         struct ggml_context * ctx,
