@@ -542,7 +542,9 @@ extern "C" {
                                    // nb[0] = ggml_type_size(type)
                                    // nb[1] = nb[0]   * (ne[0] / ggml_blck_size(type)) + padding
                                    // nb[i] = nb[i-1] * ne[i-1]
-
+        // xzl: is this reversed? i.e nb[0] is for the last dim that is contig in memory?
+        // cf: ggml_is_contiguous() which shows memlayout
+        
         // compute data
         enum ggml_op op;
 

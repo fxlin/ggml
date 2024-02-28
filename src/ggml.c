@@ -2184,6 +2184,7 @@ GGML_CALL int64_t ggml_nrows(const struct ggml_tensor * tensor) {
     return tensor->ne[1]*tensor->ne[2]*tensor->ne[3];
 }
 
+// xzl: this shows ggml_tensor mem layout
 GGML_CALL size_t ggml_nbytes(const struct ggml_tensor * tensor) {
     size_t nbytes;
     size_t blck_size = ggml_blck_size(tensor->type);
@@ -2351,7 +2352,7 @@ GGML_CALL bool ggml_is_contiguous(const struct ggml_tensor * tensor) {
         tensor->nb[0] == ggml_type_size(tensor->type) &&
         tensor->nb[1] == (tensor->nb[0]*tensor->ne[0])/ggml_blck_size(tensor->type) &&
         tensor->nb[2] == tensor->nb[1]*tensor->ne[1] &&
-        tensor->nb[3] == tensor->nb[2]*tensor->ne[2];
+        tensor->nb[3] == tensor->nb[2]*tensor->ne[2];   // xzl: apparently nb[3] is the highest dim. 
 }
 
 static inline bool ggml_is_contiguous_except_dim_1(const struct ggml_tensor * tensor) {
