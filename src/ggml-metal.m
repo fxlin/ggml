@@ -773,7 +773,8 @@ static bool ggml_metal_graph_compute(
 
         id<MTLCommandBuffer> command_buffer  = command_buffers[cb_idx];
         id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoderWithDescriptor: edesc];
-
+        // xzl: encoder wraps around cmd buffer?
+        
         // xzl: dispatch a range of graph nodes to a command buffer... (cb)
         const int node_start =                                      (cb_idx + 0) * n_nodes_per_cb;
         const int node_end   = MIN((cb_idx == n_cb - 1) ? n_nodes : (cb_idx + 1) * n_nodes_per_cb, n_nodes);
@@ -875,6 +876,7 @@ static bool ggml_metal_graph_compute(
 
                         id<MTLComputePipelineState> pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_CONCAT].pipeline;
 
+                        // xzl: passing args to metal kernel??
                         [encoder setComputePipelineState:pipeline];
                         [encoder setBuffer:id_src0 offset:offs_src0 atIndex:0];
                         [encoder setBuffer:id_src1 offset:offs_src1 atIndex:1];
@@ -1295,7 +1297,7 @@ static bool ggml_metal_graph_compute(
                             [encoder dispatchThreadgroups:MTLSizeMake(ne00, ne01, ne02) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
                         }
                     } break;
-                case GGML_OP_MUL_MAT:
+                case GGML_OP_MUL_MAT:       // xzl: to read in detail TODO:
                     {
                         GGML_ASSERT(ne00 == ne10);
 
