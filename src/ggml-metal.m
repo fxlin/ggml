@@ -399,7 +399,7 @@ static struct ggml_metal_context * ggml_metal_init(int n_cb) {
     {
         NSError * error = nil;
 
-        for (int i = 0; i < GGML_METAL_KERNEL_TYPE_COUNT; ++i) {
+        for (int i = 0; i < GGML_METAL_KERNEL_TYPE_COUNT; ++i) {        // xzl: "pipeline means??"
             ctx->kernels[i].pipeline = nil;
         }
 
@@ -607,7 +607,7 @@ struct ggml_backend_metal_buffer_context {
 // finds the Metal buffer that contains the tensor data on the GPU device
 // the assumption is that there is 1-to-1 mapping between the host and device memory buffers, so we can find the
 // Metal buffer based on the host memory pointer
-//
+// xzl: said for cpu/gpu sync
 static id<MTLBuffer> ggml_metal_get_buffer(struct ggml_tensor * t, size_t * offs) {
     //GGML_METAL_LOG_INFO("%s: data tensor '%16s', offs_data = %8ld, offs_eval = %8ld, offs_cach = %8ld\n", __func__, t->name, offs_data, offs_eval, offs_cach);
 
@@ -627,7 +627,7 @@ static id<MTLBuffer> ggml_metal_get_buffer(struct ggml_tensor * t, size_t * offs
 
             //GGML_METAL_LOG_INFO("%s: tensor '%16s', offs = %8ld\n", __func__, t->name, *offs);
 
-            return buf_ctx->buffers[i].metal;
+            return buf_ctx->buffers[i].metal;  // xzl: metal buffer id??
         }
     }
 
@@ -814,6 +814,7 @@ static bool ggml_metal_graph_compute(
                 [encoder pushDebugGroup:[NSString stringWithCString:ggml_op_desc(dst) encoding:NSUTF8StringEncoding]];
             }
 
+            // xzl: prep args for kernels... 
             const int64_t  ne00 = src0 ? src0->ne[0] : 0;
             const int64_t  ne01 = src0 ? src0->ne[1] : 0;
             const int64_t  ne02 = src0 ? src0->ne[2] : 0;
@@ -2776,6 +2777,7 @@ void ggml_backend_metal_capture_next_compute(ggml_backend_t backend) {
 
 GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void * user_data); // silence warning
 
+// xzl: called by ggml-backend.c
 GGML_CALL ggml_backend_t ggml_backend_reg_metal_init(const char * params, void * user_data) {
     return ggml_backend_metal_init();
 

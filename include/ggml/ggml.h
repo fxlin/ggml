@@ -429,7 +429,7 @@ extern "C" {
         GGML_OP_SCALE,
         GGML_OP_SET,
         GGML_OP_CPY,
-        GGML_OP_CONT,
+        GGML_OP_CONT,           // xzl: make continouus? meaning what
         GGML_OP_RESHAPE,
         GGML_OP_VIEW,
         GGML_OP_PERMUTE,
@@ -553,7 +553,7 @@ extern "C" {
 
         int32_t flags;
 
-        struct ggml_tensor * grad;
+        struct ggml_tensor * grad;              // xzl: gradients
         struct ggml_tensor * src[GGML_MAX_SRC];
 
         // performance

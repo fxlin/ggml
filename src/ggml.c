@@ -753,6 +753,7 @@ inline static float vaddvq_f32(float32x4_t v) {
 // we define a common set of C macros which map to specific intrinsics based on the current architecture
 // we then implement the fundamental computation operations below using only these macros
 // adding support for new architectures requires to define the corresponding SIMD macros
+// xzl: it's like an abs layer (GGML_XXX) over SIMD intrinstics...
 //
 // GGML_F32_STEP / GGML_F16_STEP
 //   number of elements to process in a single step
@@ -1269,6 +1270,7 @@ static inline void __sse_f16x4_store(ggml_fp16_t *x, __m128 y) {
 // fundamental operations
 //
 
+// xzl: below not worth accelerating??
 inline static void ggml_vec_set_i8(const int n, int8_t * x, const int8_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
 
 inline static void ggml_vec_set_i16(const int n, int16_t * x, const int16_t v) { for (int i = 0; i < n; ++i) x[i] = v; }
@@ -2683,6 +2685,9 @@ static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml
     return obj_new;
 }
 
+// xzl: create new tensor (inc reshape, view, etc..). 
+//          create a "view" of src tensor? reuse the buf, but put a new tensor around it.... 
+//          pytorch view .. "Returns a new tensor with the same data as the self tensor but of a different shape."
 static struct ggml_tensor * ggml_new_tensor_impl(
         struct ggml_context * ctx,
         enum   ggml_type      type,
@@ -2713,7 +2718,7 @@ static struct ggml_tensor * ggml_new_tensor_impl(
 
     size_t obj_alloc_size = 0;
 
-    if (view_src == NULL && !ctx->no_alloc) {
+    if (view_src == NULL && !ctx->no_alloc) {  // xzl: alloc buf only when src has no buf....
         if (ctx->scratch.data != NULL) {
             // allocate tensor data in the scratch buffer
             if (ctx->scratch.offs + data_size > ctx->scratch.size) {
@@ -2872,10 +2877,11 @@ struct ggml_tensor * ggml_set_zero(struct ggml_tensor * tensor) {
     return tensor;
 }
 
+// xzl: map tensor op to row-wise op (which goes to SIMD)
 struct ggml_tensor * ggml_set_i32 (struct ggml_tensor * tensor, int32_t value) {
     const int n     = ggml_nrows(tensor);
     const int nc    = tensor->ne[0];
-    const size_t n1 = tensor->nb[1];
+    const size_t n1 = tensor->nb[1];        // xzl: stride of "row"
 
     char * const data = tensor->data;
 
@@ -3294,6 +3300,7 @@ struct ggml_tensor * ggml_format_name(struct ggml_tensor * tensor, const char * 
     return tensor;
 }
 
+// xzl: this is supposed to be "in place"... use the src's buf but wrap it around a new tensor...
 struct ggml_tensor * ggml_view_tensor(
         struct ggml_context * ctx,
         struct ggml_tensor  * src) {
@@ -3396,6 +3403,7 @@ struct ggml_tensor * ggml_dup_inplace(
 
 // ggml_add
 
+// xzl: just record the graph, no actual computation?
 static struct ggml_tensor * ggml_add_impl(
         struct ggml_context * ctx,
         struct ggml_tensor * a,
@@ -5497,6 +5505,7 @@ static int64_t ggml_calc_conv_output_size(int64_t ins, int64_t ks, int s, int p,
     return (ins + 2 * p - d * (ks - 1) - 1) / s + 1;
 }
 
+// xzl: conv1d .. implemented as im2col then mulmat
 GGML_API struct ggml_tensor * ggml_conv_1d(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
@@ -5511,6 +5520,7 @@ GGML_API struct ggml_tensor * ggml_conv_1d(
                 ggml_reshape_2d(ctx, im2col, im2col->ne[0], (im2col->ne[2] * im2col->ne[1])), // [N, OL, IC * K] => [N*OL, IC * K]
                 ggml_reshape_2d(ctx, a, (a->ne[0] * a->ne[1]), a->ne[2]));                    // [OC，IC, K] => [OC, IC * K]
 
+    // then convert back...
     result = ggml_reshape_3d(ctx, result, im2col->ne[1], a->ne[2], im2col->ne[2]); // [N, OC, OL]
 
     return result;
@@ -5651,6 +5661,7 @@ struct ggml_tensor * ggml_im2col(
 // a: [OC，IC, KH, KW]
 // b: [N, IC, IH, IW]
 // result: [N, OC, OH, OW]
+// xzl: conv2d.. as im2col, then mulmat, then reshape back ...
 struct ggml_tensor * ggml_conv_2d(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
@@ -6673,6 +6684,8 @@ void ggml_set_param(
     tensor->grad = ggml_dup_tensor(ctx, tensor);
     ggml_format_name(tensor->grad, "%s (grad)", tensor->name);
 }
+
+// xzl: ggml_compute_forward_XXX are core functions... 
 
 // ggml_compute_forward_dup
 
@@ -15326,7 +15339,7 @@ static void ggml_compute_forward_cross_entropy_loss_back(
 }
 
 /////////////////////////////////
-// xzl: main entry...
+// xzl: main entry... for evaluating a graph...
 static void ggml_compute_forward(struct ggml_compute_params * params, struct ggml_tensor * tensor) {
     GGML_ASSERT(params);
 
@@ -16833,6 +16846,7 @@ void ggml_build_forward_expand(struct ggml_cgraph * cgraph, struct ggml_tensor *
     ggml_build_forward_impl(cgraph, tensor, true);
 }
 
+// xzl: seems the training entry???
 void ggml_build_backward_expand(struct ggml_context * ctx, struct ggml_cgraph * gf, struct ggml_cgraph * gb, bool keep) {
     GGML_ASSERT(gf->n_nodes > 0);
 
@@ -19826,7 +19840,7 @@ size_t ggml_quantize_chunk(enum ggml_type type, const float * src, void * dst, i
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
+// xzl: gguf -- model load store 
 struct gguf_str {
     uint64_t n;  // GGUFv2
     char * data;
