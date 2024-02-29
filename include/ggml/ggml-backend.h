@@ -49,7 +49,7 @@ extern "C" {
     // Backend
     //
 
-
+    GGML_API ggml_guid_t  ggml_backend_guid(ggml_backend_t backend);
     GGML_API const char * ggml_backend_name(ggml_backend_t backend);
     GGML_API void         ggml_backend_free(ggml_backend_t backend);
 
@@ -101,7 +101,7 @@ extern "C" {
     //
 
     // The backend registry is a registry of all the available backends, and allows initializing backends in a generic way
-
+    // xzl: is cuda/metal considered a 'backend'??
     GGML_API size_t                     ggml_backend_reg_get_count(void);
     GGML_API size_t                     ggml_backend_reg_find_by_name(const char * name);
     GGML_API ggml_backend_t             ggml_backend_reg_init_backend_from_str(const char * backend_str); // str is name[:params]
@@ -123,7 +123,7 @@ extern "C" {
       Example usage:
 
         sched = ggml_backend_sched_new({backend_gpu, backend_gpu2, backend_cpu}, num_backends);
-        // sched is initialized with measure allocators and cannot be used until allocated with a measure graph
+        // sched is initialized with measure allocators and cannot be used until allocated with a measure graph xzl:what's measure graph??
 
         // initialize buffers from a measure graph
         measure_graph = build_graph(sched); // use the allocr to allocate inputs as needed

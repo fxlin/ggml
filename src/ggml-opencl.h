@@ -22,7 +22,7 @@ GGML_API void ggml_cl_free_data(const struct ggml_tensor* tensor);
 
 GGML_API void ggml_cl_transform_tensor(void * data, struct ggml_tensor * tensor);
 
-// backend API
+// backend API          xzl: backend api not used?? instead directly cond-compiled into ggml.c
 
 // GGML_API ggml_backend_t ggml_backend_opencl_init(void);
 
