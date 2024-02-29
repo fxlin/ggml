@@ -35,7 +35,7 @@ struct whisper_filters {
     std::vector<float> data;
 };
 
-// quantize a model
+// quantize a model         xzl: inp-model in, out-model out, quantized
 bool whisper_model_quantize(const std::string & fname_inp, const std::string & fname_out, ggml_ftype ftype) {
     gpt_vocab vocab;
 

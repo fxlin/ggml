@@ -512,12 +512,14 @@ static const uint64_t table_b2b_1[1 << 8] = { B8(10, 00) }; // (!b) << 4
 #endif
 
 // reference implementation for deterministic creation of model files
+// xzl: "deterministic?" --  is there non deterministic? 
+//  x: unquant, y: quant (struct) k: total # of elements? 
 void quantize_row_q4_0_reference(const float * restrict x, block_q4_0 * restrict y, int k) {
-    static const int qk = QK4_0;
+    static const int qk = QK4_0; // xzl: qk: block size
 
     assert(k % qk == 0);
 
-    const int nb = k / qk;
+    const int nb = k / qk;      // xzl: nb: numb of blocks, then go through each blocks below..
 
     for (int i = 0; i < nb; i++) {
         float amax = 0.0f; // absolute max
@@ -3900,6 +3902,10 @@ static inline __m128i get_scale_shuffle(int i) {
 }
 #endif
 
+// xzl: quant arithmetics....
+// xzl: s=vx*vy, vx vy quantized, bs stride in s (?)  
+// n: total # elements. nrc: # of row processed at a time, 1 or 2 (some backend can do). 
+//      bx, by: row/col sizes for x/y (vectors)
 void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, size_t bx, const void * restrict vy, size_t by, int nrc) {
     const int qk = QK8_0;
     const int nb = n / qk;
@@ -3910,6 +3916,7 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
 #else
     assert(nrc == 1);
 #endif
+    // xzl: may still be used. 
     UNUSED(nrc);
     UNUSED(bx);
     UNUSED(by);
@@ -3919,9 +3926,9 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
     const block_q8_0 * restrict y = vy;
 
 #if defined(__ARM_FEATURE_MATMUL_INT8)
-    if (nrc == 2) {
+    if (nrc == 2) {     // xzl: vx vy each has two buffers .... (two row/col at a time)
         const block_q4_0 * restrict vx0 = vx;
-        const block_q4_0 * restrict vx1 = vx + bx;
+        const block_q4_0 * restrict vx1 = vx + bx;  // xzl: stride??
 
         const block_q8_0 * restrict vy0 = vy;
         const block_q8_0 * restrict vy1 = vy + by;

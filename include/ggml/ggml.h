@@ -2315,6 +2315,7 @@ extern "C" {
 #else
 #define GGML_RESTRICT restrict
 #endif
+        // xzl: below - funct types for quant, dequant, and quant arithemetics (vec dot)
     typedef void (*ggml_to_float_t)  (const void  * GGML_RESTRICT x, float * GGML_RESTRICT y, int k);
     typedef void (*ggml_from_float_t)(const float * GGML_RESTRICT x, void  * GGML_RESTRICT y, int k);
     typedef void (*ggml_vec_dot_t)   (int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT x, size_t bx,

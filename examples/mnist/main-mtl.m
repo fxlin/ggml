@@ -6,6 +6,13 @@
 #import <Metal/Metal.h>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 
+// xzl: feels like experimental. a tiny mps backend for mnist ops only... a toy version of 
+// ggml-metal.c
+// 3 simple shaders (add/softmax/relu...) are inlined. 
+// use APple's MPSMatrixMultiplication shaders for matmul (why not doig this for other kernels)
+//      
+
+
 // TODO: couldn't get this to work
 //#define GGML_MTL_HEAP
 
@@ -39,7 +46,7 @@ struct ggml_mtl_context {
     id<MTLComputePipelineState> pipeline_soft_max;
 };
 
-// MSL code
+// MSL code     xzl: how about conv2d and matmul??
 NSString * const msl_library_mnist = @"\
 #include <metal_stdlib>                                                                 \n\
 using namespace metal;                                                                  \n\
@@ -136,7 +143,7 @@ struct ggml_mtl_context * mnist_mtl_init(
         fprintf(stderr, "%s: loaded kernel_soft_max: %p\n", __func__, (void *) ctx->pipeline_soft_max);
     }
 
-#ifdef GGML_MTL_HEAP
+#ifdef GGML_MTL_HEAP        // xzl: can be interesting? HEAP vs BUFFER>.. understand better
     // MTLHeap approach
 
     // pin ctx_data memory to GPU
@@ -296,6 +303,7 @@ id<MTLBuffer> mnist_mtl_get_buffer(struct ggml_mtl_context * ctx, struct ggml_te
 
 #endif
 
+// xzl: graph eval entry ....
 int mnist_mtl_eval(
         struct ggml_mtl_context * ctx,
         struct ggml_cgraph      * gf) {
@@ -387,7 +395,7 @@ int mnist_mtl_eval(
                     MPSMatrix * mat_src = [[MPSMatrix alloc] initWithBuffer:id_src offset:offs_src0 descriptor:desc];
                     MPSMatrix * mat_dst = [[MPSMatrix alloc] initWithBuffer:id_dst offset:offs_dst  descriptor:desc];
 
-                    MPSMatrixSoftMax * softmax = [[MPSMatrixSoftMax alloc] initWithDevice:ctx->device];
+                    MPSMatrixSoftMax * softmax = [[MPSMatrixSoftMax alloc] initWithDevice:ctx->device];     // xzl: a built in kernel???
 
                     [softmax encodeToCommandBuffer:command_buffer inputMatrix:mat_src resultMatrix:mat_dst];
 #else
@@ -398,7 +406,7 @@ int mnist_mtl_eval(
                     id<MTLBuffer> id_src = mnist_mtl_get_buffer(ctx, gf->nodes[i]->src[0], &offs_src0);
                     id<MTLBuffer> id_dst = mnist_mtl_get_buffer(ctx, gf->nodes[i],       &offs_dst);
 
-                    [encoder setComputePipelineState:ctx->pipeline_soft_max];
+                    [encoder setComputePipelineState:ctx->pipeline_soft_max];       // xzl: invoke kernel...
                     [encoder setBuffer:id_src offset:offs_src0 atIndex:0];
                     [encoder setBuffer:id_dst offset:offs_dst  atIndex:1];
 

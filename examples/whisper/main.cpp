@@ -1,3 +1,5 @@
+// xzl: mostly UI (parameter parsing, options, etc)
+
 #include "common.h"
 
 #include "whisper.h"
@@ -1010,7 +1012,8 @@ int main(int argc, char ** argv) {
                 };
                 wparams.abort_callback_user_data = &is_aborted;
             }
-
+            
+            // xzl: the main entry...
             if (whisper_full_parallel(ctx, wparams, pcmf32.data(), pcmf32.size(), params.n_processors) != 0) {
                 fprintf(stderr, "%s: failed to process audio\n", argv[0]);
                 return 10;
