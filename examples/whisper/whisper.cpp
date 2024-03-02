@@ -3844,7 +3844,7 @@ const char * whisper_print_system_info(void) {
 }
 
 //////////////////////////////////
-// Grammar - ported from llama.cpp
+// Grammar - ported from llama.cpp      xzl: seems the core of decoding process??
 //////////////////////////////////
 
 // Decodes a UTF-8 string which may end in an incomplete sequence. Adds a terminating 0 for use as

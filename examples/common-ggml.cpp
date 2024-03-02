@@ -38,6 +38,7 @@ enum ggml_ftype ggml_parse_ftype(const char * str) {
     return ftype;
 }
 
+// xzl: quantize model over if/of stream?
 bool ggml_common_quantize_0(
         std::ifstream & finp,
         std::ofstream & fout,
