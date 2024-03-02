@@ -185,7 +185,7 @@ struct ggml_metal_context {
     bool support_simdgroup_reduction;
     bool support_simdgroup_mm;
 
-    bool should_capture_next_compute;
+    bool should_capture_next_compute; // xzl: meaning what
 };
 
 // MSL code
@@ -761,9 +761,11 @@ static bool ggml_metal_graph_compute(
         [command_buffer enqueue];
     }
 
+    // xzl: cmd buffers will be executed in queuing order... but we encode cmds w multithreads? (is this slow?)
+
     const id<MTLCommandBuffer> *command_buffers = command_buffer_builder;
 
-    dispatch_apply(n_cb, ctx->d_queue, ^(size_t iter) {
+    dispatch_apply(n_cb, ctx->d_queue, ^(size_t iter) { // xzl: dispatch... parallel exec...
         const int cb_idx = iter;
 
         size_t offs_src0 = 0;
@@ -773,7 +775,6 @@ static bool ggml_metal_graph_compute(
 
         id<MTLCommandBuffer> command_buffer  = command_buffers[cb_idx];
         id<MTLComputeCommandEncoder> encoder = [command_buffer computeCommandEncoderWithDescriptor: edesc];
-        // xzl: encoder wraps around cmd buffer?
         
         // xzl: dispatch a range of graph nodes to a command buffer... (cb)
         const int node_start =                                      (cb_idx + 0) * n_nodes_per_cb;
@@ -876,7 +877,7 @@ static bool ggml_metal_graph_compute(
 
                         id<MTLComputePipelineState> pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_CONCAT].pipeline;
 
-                        // xzl: passing args to metal kernel??
+                        // xzl: passing args to shaders...
                         [encoder setComputePipelineState:pipeline];
                         [encoder setBuffer:id_src0 offset:offs_src0 atIndex:0];
                         [encoder setBuffer:id_src1 offset:offs_src1 atIndex:1];
@@ -2518,6 +2519,7 @@ static void ggml_backend_metal_log_allocated_size(id<MTLDevice> device) {
     UNUSED(device);
 }
 
+// xzl: may be worth reading...
 GGML_CALL static ggml_backend_buffer_t ggml_backend_metal_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
     struct ggml_backend_metal_buffer_context * ctx = malloc(sizeof(struct ggml_backend_metal_buffer_context));
 
