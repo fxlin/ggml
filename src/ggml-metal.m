@@ -607,7 +607,8 @@ struct ggml_backend_metal_buffer_context {
 // finds the Metal buffer that contains the tensor data on the GPU device
 // the assumption is that there is 1-to-1 mapping between the host and device memory buffers, so we can find the
 // Metal buffer based on the host memory pointer
-// xzl: said for cpu/gpu sync
+// xzl: said for cpu/gpu sync. just a simple lookup?
+// NB: cpu/gpu share same phys mem. cf ggml_backend_metal_buffer_type_alloc_buffer
 static id<MTLBuffer> ggml_metal_get_buffer(struct ggml_tensor * t, size_t * offs) {
     //GGML_METAL_LOG_INFO("%s: data tensor '%16s', offs_data = %8ld, offs_eval = %8ld, offs_cach = %8ld\n", __func__, t->name, offs_data, offs_eval, offs_cach);
 
@@ -627,7 +628,7 @@ static id<MTLBuffer> ggml_metal_get_buffer(struct ggml_tensor * t, size_t * offs
 
             //GGML_METAL_LOG_INFO("%s: tensor '%16s', offs = %8ld\n", __func__, t->name, *offs);
 
-            return buf_ctx->buffers[i].metal;  // xzl: metal buffer id??
+            return buf_ctx->buffers[i].metal;  // xzl: metal buffer ref, where was it allocated? 
         }
     }
 
@@ -761,8 +762,8 @@ static bool ggml_metal_graph_compute(
         [command_buffer enqueue];
     }
 
-    // xzl: cmd buffers will be executed in queuing order... but we encode cmds w multithreads? (is this slow?)
-
+    // xzl: cmd buffers will be executed in queuing order... 
+    //      but we encode cmds w multithreads? (is this slow?)
     const id<MTLCommandBuffer> *command_buffers = command_buffer_builder;
 
     dispatch_apply(n_cb, ctx->d_queue, ^(size_t iter) { // xzl: dispatch... parallel exec...
@@ -2519,7 +2520,7 @@ static void ggml_backend_metal_log_allocated_size(id<MTLDevice> device) {
     UNUSED(device);
 }
 
-// xzl: may be worth reading...
+// xzl: registered as a backend callback... for mem alloc. when will it be called? 
 GGML_CALL static ggml_backend_buffer_t ggml_backend_metal_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buft, size_t size) {
     struct ggml_backend_metal_buffer_context * ctx = malloc(sizeof(struct ggml_backend_metal_buffer_context));
 
@@ -2532,7 +2533,7 @@ GGML_CALL static ggml_backend_buffer_t ggml_backend_metal_buffer_type_alloc_buff
 
     id<MTLDevice> device = ggml_backend_metal_get_device();
 
-    ctx->all_data = ggml_metal_host_malloc(size_aligned);
+    ctx->all_data = ggml_metal_host_malloc(size_aligned);  // xzl: alloc host buffer... 
     ctx->all_size = size_aligned;
     ctx->owned = true;
     ctx->n_buffers = 1;
@@ -2542,7 +2543,7 @@ GGML_CALL static ggml_backend_buffer_t ggml_backend_metal_buffer_type_alloc_buff
     ctx->buffers[0].metal = [device newBufferWithBytesNoCopy:ctx->all_data
                     length:size_aligned
                     options:MTLResourceStorageModeShared
-                    deallocator:nil];
+                    deallocator:nil];           // xzl: shared access; zero copy... nice...
 
     if (ctx->buffers[0].metal == nil) {
         GGML_METAL_LOG_ERROR("%s: error: failed to allocate buffer, size = %8.2f MiB\n", __func__, size_aligned / 1024.0 / 1024.0);
