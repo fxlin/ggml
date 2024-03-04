@@ -15342,7 +15342,7 @@ static void ggml_compute_forward_cross_entropy_loss_back(
 }
 
 /////////////////////////////////
-// xzl: main entry... for evaluating a graph...
+// xzl: main entry... for evaluating a graph... params contains thread idx already. 
 static void ggml_compute_forward(struct ggml_compute_params * params, struct ggml_tensor * tensor) {
     GGML_ASSERT(params);
 
@@ -17196,6 +17196,7 @@ static void ggml_graph_compute_perf_stats_node(struct ggml_tensor * node, const 
     node->perf_time_us += time_us_cur;
 }
 
+// xzl: decides (cpu) parallelism per op... 
 static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
     int n_tasks = 0;
 
@@ -17455,6 +17456,7 @@ static void ggml_graph_compute_thread_sync_task(int * task_phase, struct ggml_co
 }
 
 // xzl: the graph level entry... (exec in work therads... thread pool. (clearly cpu!))
+//  xzl: state->shared is among all workers threads; params is thread local 
 static thread_ret_t ggml_graph_compute_thread(void * data) {
     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
 
@@ -17474,9 +17476,9 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             return (thread_ret_t) GGML_EXIT_ABORTED;
         }
 
-        if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) {
+        if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) { // xzl: 1st worker?
             // all other threads are finished and spinning
-            // do finalize and init here so we don't have synchronize again
+            // do finalize and init here so we don't have synchronize again   xzl: meaning what
             struct ggml_compute_params params = {
                 /*.type  =*/ GGML_TASK_TYPE_FINALIZE,
                 /*.ith   =*/ 0,
@@ -17486,11 +17488,11 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             };
 
             if (node_n != -1) {
-                /* FINALIZE */
+                /* FINALIZE xzl: meaning a node (op) has ??? -- eval the node */
                 struct ggml_tensor * node = cgraph->nodes[node_n];
                 if (GGML_OP_HAS_FINALIZE[node->op]) {
                     params.nth = ggml_get_n_tasks(node, n_threads);
-                    ggml_compute_forward(&params, node);
+                    ggml_compute_forward(&params, node); // xzl: recursion? spawn more tasks?
                 }
                 ggml_graph_compute_perf_stats_node(node, state->shared);
             }
@@ -17537,7 +17539,7 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             atomic_store(&state->shared->n_active,  n_threads);
             atomic_store(&state->shared->node_n,    node_n);
             atomic_store(&state->shared->node_task, task_phase);
-        } else {
+        } else {  // xzl: 2+ workers..
             ggml_graph_compute_thread_sync_node(&node_n,     state, false);
             ggml_graph_compute_thread_sync_task(&task_phase, state, false);
         }
@@ -18128,6 +18130,7 @@ void ggml_graph_export(const struct ggml_cgraph * cgraph, const char * fname) {
     }
 }
 
+// xzl: why two contexts, one for "data", oine for "eval"... (model and intermediate buf??)
 struct ggml_cgraph * ggml_graph_import(const char * fname, struct ggml_context ** ctx_data, struct ggml_context ** ctx_eval) {
     assert(*ctx_data == NULL);
     assert(*ctx_eval == NULL);
@@ -18159,6 +18162,8 @@ struct ggml_cgraph * ggml_graph_import(const char * fname, struct ggml_context *
                 .mem_buffer = NULL,
                 .no_alloc   = false,
             };
+
+            // xzl: ctx_data, the memory used for storing weights (from file?)
 
             *ctx_data = ggml_init(params);
 
@@ -18201,6 +18206,7 @@ struct ggml_cgraph * ggml_graph_import(const char * fname, struct ggml_context *
             return result;
         }
 
+        // xzl: ctx_eval like, the memory used for eval the graph??
         const uint32_t n_leafs   = *(const uint32_t *) ptr; ptr += sizeof(n_leafs);
         const uint32_t n_nodes   = *(const uint32_t *) ptr; ptr += sizeof(n_nodes);
         const uint64_t size_eval = *(const uint64_t *) ptr; ptr += sizeof(size_eval);

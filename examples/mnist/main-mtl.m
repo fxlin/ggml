@@ -16,7 +16,7 @@
 // TODO: couldn't get this to work
 //#define GGML_MTL_HEAP
 
-struct ggml_mtl_context {
+struct ggml_mtl_context {           // xzl: why wraps around 3 ggml_contexts... for diff mem types?
     struct ggml_context * ctx_data;
     struct ggml_context * ctx_eval;
     struct ggml_context * ctx_work;
@@ -25,6 +25,8 @@ struct ggml_mtl_context {
     id<MTLCommandQueue> queue;
     id<MTLLibrary>      library;
 
+    // xzl: id<> is like pointer in objc...
+    //  below are metal mem buffers. 
 #ifdef GGML_MTL_HEAP
     id<MTLHeap> heap_data;
     id<MTLHeap> heap_eval;
@@ -35,7 +37,7 @@ struct ggml_mtl_context {
 
     id<MTLBuffer> out;
 
-    // custom kernels
+    // custom kernels           xzl: hand crafted here
     id<MTLFunction>             function_add;
     id<MTLComputePipelineState> pipeline_add;
 
@@ -103,7 +105,7 @@ struct ggml_mtl_context * mnist_mtl_init(
     ctx->ctx_work = ctx_work;
 
     ctx->device = MTLCreateSystemDefaultDevice();
-    ctx->queue  = [ctx->device newCommandQueue];
+    ctx->queue  = [ctx->device newCommandQueue];            // xzl: objc, msg passing (method invoke)
 
     // determine if we can use MPS
     if (MPSSupportsMTLDevice(ctx->device)) {
@@ -158,6 +160,9 @@ struct ggml_mtl_context * mnist_mtl_init(
         heap_desc.storageMode = MTLStorageModeShared;
         heap_desc.size        = mem_size;
 
+        // xzl: below, create a gpu heap instance, same size as ctx_data's buffer (?). then get a buffer out of it
+        //           copy contents over
+
         printf("heap_desc.size = %zu\n", mem_size);
 
         ctx->heap_data = [ctx->device newHeapWithDescriptor:heap_desc];
@@ -180,6 +185,7 @@ struct ggml_mtl_context * mnist_mtl_init(
 
     // pin ctx_eval memory to GPU
     // this heap will be used for the intermediate results of the evaluation
+    // xzl: 2nd gpu heap instance... for "eval" context. 
     {
         const size_t mem_size = ggml_get_mem_size(ctx_eval);
 
@@ -199,6 +205,7 @@ struct ggml_mtl_context * mnist_mtl_init(
     // use MTLStorageModeShared to allow us to initialize the weights from the CPU
     // TODO: how to use MTLStorageModeManaged?
     // TODO: see if we can avoid this copy somehow
+    // xzl: same deal as above... allocate mtl buffer of same size. direct get MTL buffer (instead of new heap, then alloc buffer)
     {
         const void * mem_buffer = ggml_get_mem_buffer(ctx_data);
         const size_t mem_size   = ggml_get_mem_size(ctx_data);
@@ -320,7 +327,7 @@ int mnist_mtl_eval(
     {
         struct ggml_tensor * inp = ggml_graph_get_tensor(gf, "input");
 
-        id<MTLBuffer> id_dst = mnist_mtl_get_buffer(ctx, inp, &offs_src0);
+        id<MTLBuffer> id_dst = mnist_mtl_get_buffer(ctx, inp, &offs_src0);      // xzl: so can MTL buffer be accessed directly? 
 
         memcpy((char *) id_dst.contents + offs_src0, inp->data, ggml_nbytes(inp));
     }
@@ -346,6 +353,7 @@ int mnist_mtl_eval(
 
                     const int64_t n = ggml_nelements(gf->nodes[i]);
 
+                    // xzl: below maximizing # of thrgroups.... to use more gpu cores??? 
                     [encoder dispatchThreadgroups:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
                 } break;
             case GGML_OP_UNARY:
@@ -365,6 +373,7 @@ int mnist_mtl_eval(
 
                             const int64_t n = ggml_nelements(gf->nodes[i]);
 
+                            // xzl also cf above....? 
                             [encoder dispatchThreadgroups:MTLSizeMake(n, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
                         } break;
                     default:
@@ -410,6 +419,7 @@ int mnist_mtl_eval(
                     [encoder setBuffer:id_src offset:offs_src0 atIndex:0];
                     [encoder setBuffer:id_dst offset:offs_dst  atIndex:1];
 
+                    // xzl: 1 grp, 1 thread???
                     [encoder dispatchThreadgroups:MTLSizeMake(1, 1, 1) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
 #endif
                 } break;
@@ -451,6 +461,7 @@ int mnist_mtl_eval(
                         transposeLeft:false transposeRight:true resultRows:nrows1 resultColumns:nrows0 interiorColumns:ncols0 alpha:1.0 beta:0.0];
 
                     [mul encodeToCommandBuffer:command_buffer leftMatrix:mat_src1 rightMatrix:mat_src0 resultMatrix:mat_dst];
+                    // xzl: directly enqueeu the kernel... nowhere to specify threadgrp etc?
                 } break;
             default:
                 {

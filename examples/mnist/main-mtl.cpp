@@ -9,6 +9,7 @@
 //
 // $ ./bin/mnist-mtl ./models/mnist/mnist.ggml ../examples/mnist/models/mnist/t10k-images.idx3-ubyte
 //
+// xzl - a standalone, tiny ex to use metal backend.
 
 #include "ggml/ggml.h"
 
@@ -37,9 +38,9 @@ int mnist_eval(
 
     struct ggml_cgraph * gf = ggml_graph_import(fname_cgraph, &ctx_data, &ctx_eval);
 
-    // allocate work context
+    // allocate work context            xzl:  ctx_work vs. ctx_eval?    
     static size_t buf_size = 128ull*1024*1024; // TODO
-    static void * buf = malloc(buf_size);
+    static void * buf = malloc(buf_size);           // xzl: the mem pool for all intermediate tensors... 
 
     struct ggml_init_params params = {
         /*.mem_size   =*/ buf_size,
@@ -60,7 +61,7 @@ int mnist_eval(
         if (i % 2 == 0) {
             memcpy(input->data, digit.data(), ggml_nbytes(input));
         } else {
-            memset(input->data, 0, ggml_nbytes(input));
+            memset(input->data, 0, ggml_nbytes(input)); // xzl:why all 0s? testing?
         }
 
         // the actual inference happens here

@@ -2,7 +2,7 @@
 
 //
 // GGML Tensor Library
-//
+// xzl: below are good docs....
 // This documentation is still a work in progress.
 // If you wish some specific topics to be covered, feel free to drop a comment:
 //
