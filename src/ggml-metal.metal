@@ -51,6 +51,7 @@ enum ggml_sort_order {
 // general-purpose kernel for addition, multiplication and division of two tensors
 // pros: works for non-contiguous tensors, supports broadcast across all dims
 // cons: not very efficient
+// xzl: src0/src1 seem fp. see code below
 kernel void kernel_add(
         device const char * src0,
         device const char * src1,
@@ -96,7 +97,7 @@ kernel void kernel_add(
     device       char * dst_ptr  = dst  + i03*nb3  + i02*nb2  + i01*nb1  + offs;
 
     for (int i0 = tpitg.x; i0 < ne0; i0 += ntg.x) {
-        const int i10 = i0 % ne10;
+        const int i10 = i0 % ne10;      // xzl: below -- fp arthiemetics
         *((device float *)(dst_ptr + i0*nb0)) = *((device float *)(src0_ptr + i0*nb00)) + *((device float *)(src1_ptr + i10*nb10));
     }
 }
@@ -2611,6 +2612,7 @@ void kernel_mul_mv_q2_K_f32_impl(
             yl[i+24] = y4[i+96]; sumy[3] += yl[i+24];
         }
 
+        // xzl: x is quantized integer... the following seems ot dequant? before actual computation
         device const uint8_t  * sc = (device const uint8_t  *)x[ib].scales + 8*iq + is;
         device const uint16_t * qs = (device const uint16_t *)x[ib].qs + 16 * iq + 4 * ir;
         device const half     * dh = &x[ib].d;
@@ -5349,7 +5351,8 @@ kernel void kernel_get_rows_i32(
 #define SG_MAT_SIZE 64 // simdgroup matrix is of shape 8x8
 #define SG_MAT_ROW 8
 
-// each block_q contains 16*nl weights
+// xzl: core of metal matmul... blockwise
+// each block_q contains 16*nl weights          src0: quant src1: fp (?)
 template<typename block_q, short nl, void (*dequantize_func)(device const block_q *, short, thread half4x4 &)>
 void kernel_mul_mm_impl(device const  uchar * src0,
                         device const  uchar * src1,
@@ -5393,7 +5396,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
         c_res[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
     }
 
-    short il = (tiitg % THREAD_PER_ROW);
+    short il = (tiitg % THREAD_PER_ROW);  // xzl: thread id for that row?
 
     const uint i12 = im%ne12;
     const uint i13 = im/ne12;
@@ -5401,6 +5404,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
     uint   offset0 = (i12/r2)*nb02 + (i13/r3)*(nb02*ne02);
     ushort offset1 = il/nl;
 
+    // xzl: cast to block type....   x is quant, y is .. FP?
     device const block_q * x = (device const block_q *)(src0 + (r0 * BLOCK_SIZE_M + thread_row) * nb01 + offset0) + offset1;
     device const float   * y = (device const float   *)(src1
         + nb12 * im
@@ -5410,7 +5414,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
     for (int loop_k = 0; loop_k < ne00; loop_k += BLOCK_SIZE_K) {
         // load data and store to threadgroup memory
         half4x4 temp_a;
-        dequantize_func(x, il, temp_a);
+        dequantize_func(x, il, temp_a); // xzl: dequant on gpu? x points to block. temp_a large enough?
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
         #pragma unroll(16)
@@ -5547,7 +5551,7 @@ void kernel_mul_mm_id_impl(
     for (int loop_k = 0; loop_k < ne00; loop_k += BLOCK_SIZE_K) {
         // load data and store to threadgroup memory
         half4x4 temp_a;
-        dequantize_func(x, il, temp_a);
+        dequantize_func(x, il, temp_a);     // xzl: also dequant in place??
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
         for (int i = 0; i < 16; i++) {
@@ -5730,8 +5734,8 @@ kernel void kernel_mul_mm_id(
 
 //
 // get rows
-//
-
+//  xzl: all variants? same prototype. also get rows b/c ggml is row centric?
+//      instantiate all the template functions?
 typedef void (get_rows_t)(
         device const void * src0,
         device const char * src1,
