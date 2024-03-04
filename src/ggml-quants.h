@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// xzl: Q4_0, Q5_1... blocksize for differnt types
+
 #define QK4_0 32
 typedef struct {
     ggml_fp16_t d;          // delta
@@ -58,7 +60,7 @@ static_assert(sizeof(block_q8_1) == 2*sizeof(float) + QK8_1, "wrong q8_1 block s
 // Super-block quantization structures
 //
 
-// Super-block size
+// Super-block size         xzl: how this works?
 #ifdef GGML_QKK_64
 #define QK_K 64
 #define K_SCALE_SIZE 4
@@ -71,13 +73,17 @@ static_assert(sizeof(block_q8_1) == 2*sizeof(float) + QK8_1, "wrong q8_1 block s
 //  are these cpu centric? (superblock, blocks, 16 weights per block, etc...)
 
 
+// xzl: types below seem to use "superblocks"
+//  there are some info shared at the block level (e.g. scales) ???
+//  some info shared at superblock level (e.g d, dmin)
+
 // 2-bit quantization
 // weight is represented as x = a * q + b
 // 16 blocks of 16 elements each
 // Effectively 2.625 bits per weight
 typedef struct {
     uint8_t scales[QK_K/16]; // scales and mins, quantized with 4 bits
-    uint8_t qs[QK_K/4];      // quants
+    uint8_t qs[QK_K/4];      // quants  (xzl: meaning that #total bytes=#elements/4, each ele 2bit)
     ggml_fp16_t d;           // super-block scale for quantized scales
     ggml_fp16_t dmin;        // super-block scale for quantized mins
 } block_q2_K;
@@ -230,6 +236,7 @@ extern "C" {
 #endif
 
 // Quantization
+// xzl: x seems a linear buf with k elements. that's why called "quantize_row"
 void quantize_row_q4_0_reference(const float * GGML_RESTRICT x, block_q4_0 * GGML_RESTRICT y, int k);
 void quantize_row_q4_1_reference(const float * GGML_RESTRICT x, block_q4_1 * GGML_RESTRICT y, int k);
 void quantize_row_q5_0_reference(const float * GGML_RESTRICT x, block_q5_0 * GGML_RESTRICT y, int k);
@@ -247,6 +254,7 @@ void quantize_row_iq3_xxs_reference(const float * GGML_RESTRICT x, block_iq3_xxs
 void quantize_row_iq4_nl_reference (const float * GGML_RESTRICT x, block_iq4_nl  * GGML_RESTRICT y, int k);
 void quantize_row_iq3_s_reference  (const float * GGML_RESTRICT x, block_iq3_s   * GGML_RESTRICT y, int k);
 
+// xzl: may fall back to the above "ref" impl...
 void quantize_row_q4_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int k);
 void quantize_row_q4_1(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int k);
 void quantize_row_q5_0(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, int k);
@@ -286,6 +294,12 @@ void dequantize_row_iq4_nl (const block_iq4_nl  * GGML_RESTRICT x, float * GGML_
 void dequantize_row_iq3_s  (const block_iq3_s   * GGML_RESTRICT x, float * GGML_RESTRICT y, int k);
 
 // Dot product
+
+// xzl: quant arithemetics .. all in  dot product. (no matmul at lowest level?)
+//  s=vx*vy, vx vy quantized, s is FP. bs stride in s (?)  
+// n: total # elements. nrc: # of row processed at a time, 1 or 2 (some backend can do). 
+//      bx, by: row/col sizes for x/y (vectors)
+
 void ggml_vec_dot_q4_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc);
 void ggml_vec_dot_q4_1_q8_1(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc);
 void ggml_vec_dot_q5_0_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc);

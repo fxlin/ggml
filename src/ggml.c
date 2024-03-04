@@ -10429,7 +10429,7 @@ static void ggml_compute_forward_mul_mat(
     }
 #endif
 
-    if (params->type == GGML_TASK_TYPE_INIT) {
+    if (params->type == GGML_TASK_TYPE_INIT) { // xzl: init task, so we do quant??
         if (ith != 0) {
             return;
         }
@@ -10504,6 +10504,8 @@ static void ggml_compute_forward_mul_mat(
     if ((nr0 % 2 != 0) || (ne11 % 2 != 0)) {
         nrc = 1;
     }
+
+    // xzl: below: break down matmul into dot product (calling vec_dot())
 
     const size_t src1_col_stride = src1_cont || src1->type != vec_dot_type ? row_size : nb11;
 
