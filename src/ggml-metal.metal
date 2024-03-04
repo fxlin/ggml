@@ -5340,6 +5340,9 @@ kernel void kernel_get_rows_i32(
 }
 
 
+// xzl: "simdgroup matrix" -- cf shader lang. like, simdgroup_float8x8, 
+//  a block .. 64x32? 
+
 #define BLOCK_SIZE_M 64 // 8 simdgroup matrices from matrix A
 #define BLOCK_SIZE_N 32 // 4 simdgroup matrices from matrix B
 #define BLOCK_SIZE_K 32
@@ -5348,11 +5351,11 @@ kernel void kernel_get_rows_i32(
 #define THREAD_PER_BLOCK 128
 #define THREAD_PER_ROW 2 // 2 thread for each row in matrix A to load numbers
 #define THREAD_PER_COL 4 // 4 thread for each row in matrix B to load numbers
-#define SG_MAT_SIZE 64 // simdgroup matrix is of shape 8x8
+#define SG_MAT_SIZE 64 // simdgroup matrix is of shape 8x8   
 #define SG_MAT_ROW 8
 
 // xzl: core of metal matmul... blockwise
-// each block_q contains 16*nl weights          src0: quant src1: fp (?)
+// each block_q contains 16*nl weights          src0: weights, quant; src1: features, fp (?)
 template<typename block_q, short nl, void (*dequantize_func)(device const block_q *, short, thread half4x4 &)>
 void kernel_mul_mm_impl(device const  uchar * src0,
                         device const  uchar * src1,
@@ -5374,6 +5377,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
                         uint                  tiitg[[thread_index_in_threadgroup]],
                         uint                  sgitg[[simdgroup_index_in_threadgroup]]) {
 
+    // xzl: shared_memory how large?? set by caller??
     threadgroup half  * sa = (threadgroup half  *)(shared_memory);
     threadgroup float * sb = (threadgroup float *)(shared_memory + 4096);
 
@@ -5396,6 +5400,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
         c_res[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
     }
 
+    // xzl: below are just for loading/storing of threadgroup memory?? (per core)
     short il = (tiitg % THREAD_PER_ROW);  // xzl: thread id for that row?
 
     const uint i12 = im%ne12;
@@ -5404,7 +5409,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
     uint   offset0 = (i12/r2)*nb02 + (i13/r3)*(nb02*ne02);
     ushort offset1 = il/nl;
 
-    // xzl: cast to block type....   x is quant, y is .. FP?
+    // xzl: cast to block type....   x is quant (A), y is FP (B)
     device const block_q * x = (device const block_q *)(src0 + (r0 * BLOCK_SIZE_M + thread_row) * nb01 + offset0) + offset1;
     device const float   * y = (device const float   *)(src1
         + nb12 * im
@@ -5414,9 +5419,10 @@ void kernel_mul_mm_impl(device const  uchar * src0,
     for (int loop_k = 0; loop_k < ne00; loop_k += BLOCK_SIZE_K) {
         // load data and store to threadgroup memory
         half4x4 temp_a;
-        dequantize_func(x, il, temp_a); // xzl: dequant on gpu? x points to block. temp_a large enough?
+        dequantize_func(x, il, temp_a); // xzl: dequant on gpu... x points to block. temp_a large enough?
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
+        // xzl: flatten (reshape dequant res, temp_a) into threadgroup memory (sa)?
         #pragma unroll(16)
         for (int i = 0; i < 16; i++) {
             *(sa + SG_MAT_SIZE * ((tiitg / THREAD_PER_ROW / 8) \
@@ -5424,6 +5430,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
             +                     (tiitg / THREAD_PER_ROW) % 8  + (i & 7) * 8) = temp_a[i/4][i%4];
         }
 
+        // xzl: load y (device memory) to threadgroup mem (sb)... 
         *(threadgroup float2x4 *)(sb + (tiitg % THREAD_PER_COL) * 8 * 32 + 8 * (tiitg / THREAD_PER_COL)) = *((device float2x4 *)y);
 
         il = (il + 2 < nl) ? il + 2 : il % 2;
@@ -5435,6 +5442,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
         // load matrices from threadgroup memory and conduct outer products
         threadgroup half  * lsma = (sa + THREAD_MAT_M * SG_MAT_SIZE * (sgitg % 2));
         threadgroup float * lsmb = (sb + THREAD_MAT_N * SG_MAT_SIZE * (sgitg / 2));
+
 
         #pragma unroll(4)
         for (int ik = 0; ik < BLOCK_SIZE_K / 8; ik++) {
@@ -5454,10 +5462,12 @@ void kernel_mul_mm_impl(device const  uchar * src0,
             #pragma unroll(8)
             for (int i = 0; i < 8; i++){
                 simdgroup_multiply_accumulate(c_res[i], mb[i/4], ma[i%4], c_res[i]);
+                // xzl: this seems the core. is it dot product? or matmul??
             }
         }
     }
 
+    // xzl: write back res from local (simd-group) to global device memory (C)
     if ((r0 + 1) * BLOCK_SIZE_M <= ne0 && (r1 + 1) * BLOCK_SIZE_N <= ne1) {
         device float * C = dst + (BLOCK_SIZE_M * r0 + 32 * (sgitg &  1)) \
                                + (BLOCK_SIZE_N * r1 + 16 * (sgitg >> 1)) * ne0 + im*ne1*ne0;
