@@ -2691,6 +2691,7 @@ static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml
 // xzl: create new tensor (inc reshape, view, etc..). 
 //          create a "view" of src tensor? reuse the buf, but put a new tensor around it.... 
 //          pytorch view .. "Returns a new tensor with the same data as the self tensor but of a different shape."
+//      seems cpu only? (won't invoke ggml_backend_alloc_ctx_tensors()??)
 static struct ggml_tensor * ggml_new_tensor_impl(
         struct ggml_context * ctx,
         enum   ggml_type      type,
