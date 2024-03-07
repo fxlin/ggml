@@ -1985,7 +1985,7 @@ struct ggml_context {
     struct ggml_object * objects_begin;
     struct ggml_object * objects_end;
 
-    struct ggml_scratch scratch;
+    struct ggml_scratch scratch;            // xzl: why need this
     struct ggml_scratch scratch_save;
 };
 
@@ -2642,6 +2642,8 @@ static void ggml_scratch_load(struct ggml_context * ctx) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// xzl: only put an obj header in contxt mem pool. obj->off points to right after the header, 
+//              i.e. wheer buf starts...
 static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml_object_type type, size_t size) {
     // always insert objects at the end of the context's memory pool
     struct ggml_object * obj_cur = ctx->objects_end;
@@ -2664,7 +2666,7 @@ static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml
     }
 
     *obj_new = (struct ggml_object) {
-        .offs = cur_end + GGML_OBJECT_SIZE,
+        .offs = cur_end + GGML_OBJECT_SIZE,     // xzl: right after the header...
         .size = size_needed,
         .next = NULL,
         .type = type,
@@ -2742,6 +2744,7 @@ static struct ggml_tensor * ggml_new_tensor_impl(
 
     // TODO: for recoverable errors, we would need to free the data allocated from the scratch buffer here
 
+    // xzl: tensor struct is right after the obj header....
     struct ggml_tensor * const result = (struct ggml_tensor *)((char *)ctx->mem_buffer + obj_new->offs);
 
     *result = (struct ggml_tensor) {
@@ -2765,6 +2768,7 @@ static struct ggml_tensor * ggml_new_tensor_impl(
         /*.extra        =*/ NULL,
         /*.padding      =*/ { 0 },
     };
+    // xzl: data -- right after the tensor struct? (in the context buf)
 
     // TODO: this should not be needed as long as we don't rely on aligned SIMD loads
     //ggml_assert_aligned(result->data);

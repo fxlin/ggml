@@ -105,6 +105,7 @@ bool mnist_model_load(const std::string & fname, mnist_model & model) {
             model.hparams.n_input  = ne_weight[0];
             model.hparams.n_hidden = ne_weight[1];
 
+            // xzl: allocate tensor from ctx...
             model.fc1_weight = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, model.hparams.n_input, model.hparams.n_hidden);
             fin.read(reinterpret_cast<char *>(model.fc1_weight->data), ggml_nbytes(model.fc1_weight));
             ggml_set_name(model.fc1_weight, "fc1_weight");
