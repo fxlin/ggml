@@ -1645,6 +1645,7 @@ void ggml_backend_view_init(ggml_backend_buffer_t buffer, struct ggml_tensor * t
     ggml_backend_buffer_init_tensor(buffer, tensor);
 }
 
+// xzl: only call backend tensor init callback (if any), not doing any actual mem alloc???
 void ggml_backend_tensor_alloc(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, void * addr) {
     GGML_ASSERT(tensor->buffer == NULL);
     GGML_ASSERT(tensor->data == NULL);

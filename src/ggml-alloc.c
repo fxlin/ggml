@@ -163,6 +163,7 @@ static void remove_allocated_tensor(struct ggml_dyn_tallocr * alloc, size_t offs
 }
 #endif
 
+// xzl: the core of tensor allocator. looks like a heap? (free blocks of different sizes) sorted?
 static size_t ggml_dyn_tallocr_alloc(struct ggml_dyn_tallocr * alloc, size_t size, const struct ggml_tensor * tensor) {
     size = aligned_offset(NULL, size, alloc->alignment);
 
@@ -354,12 +355,13 @@ struct hash_node {
     bool allocated;
 };
 
-//
+// xzl: bookekeep a tensor alloc info (where is it in the big buf??)
 struct tensor_alloc {
     size_t offset;
     size_t size_max; // 0 = pre-allocated, unused, or view
 };
 
+// xzl: bookkeep node mem alloc (dst tensor, src tensors...)
 struct node_alloc {
     int buffer_id;
     struct tensor_alloc dst;
@@ -367,10 +369,11 @@ struct node_alloc {
 };
 
 struct ggml_gallocr {
+    // xzl: N backing buffers (contig...) cf ggml_gallocr_new_n()
     ggml_backend_buffer_type_t * bufts; // [n_buffers]
     ggml_backend_buffer_t * buffers; // [n_buffers]
-    struct ggml_dyn_tallocr ** buf_tallocs; // [n_buffers]
-    int n_buffers;
+    struct ggml_dyn_tallocr ** buf_tallocs; // [n_buffers]  xzl: each is a tensor allocator.. one for each backig buf
+    int n_buffers;      
 
     struct ggml_hash_set hash_set;
     struct hash_node * hash_values; // [hash_set.size]
@@ -381,6 +384,9 @@ struct ggml_gallocr {
     struct tensor_alloc * leaf_allocs; // [n_leafs]
     int n_leafs;
 };
+
+// xzl: N backing bufs... of differen types. each with separate tensor allocator (diff alignment req)
+//      NB: this does not actually alloc backing buf, which need backend specific func
 
 ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs) {
     ggml_gallocr_t galloc = (ggml_gallocr_t)calloc(sizeof(struct ggml_gallocr), 1);
@@ -406,6 +412,7 @@ ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs
     return galloc;
 }
 
+// xzl: one backing buf... default
 ggml_gallocr_t ggml_gallocr_new(ggml_backend_buffer_type_t buft) {
     return ggml_gallocr_new_n(&buft, 1);
 }
@@ -456,6 +463,7 @@ static bool ggml_gallocr_is_allocated(ggml_gallocr_t galloc, struct ggml_tensor 
     return t->data != NULL || ggml_gallocr_hash_get(galloc, t)->allocated;
 }
 
+// xzl: basically, goes to tensor allocator
 static void ggml_gallocr_allocate_node(ggml_gallocr_t galloc, struct ggml_tensor * node, int buffer_id) {
     struct hash_node * hn = ggml_gallocr_hash_get(galloc, node);
 
@@ -543,6 +551,8 @@ static int get_node_buffer_id(const int * node_buffer_ids, int i) {
     return node_buffer_ids ? node_buffer_ids[i] : 0;
 }
 
+// xzl: the core func for allocating tensor bufs. walk a graph to alloc (assign) memory for all nodes
+//          reuse as possible
 static void ggml_gallocr_alloc_graph_impl(ggml_gallocr_t galloc, struct ggml_cgraph * graph, const int * node_buffer_ids) {
     // clear hash tables
     memset(galloc->hash_set.keys, 0, galloc->hash_set.size * sizeof(struct ggml_tensor *));
@@ -562,6 +572,7 @@ static void ggml_gallocr_alloc_graph_impl(ggml_gallocr_t galloc, struct ggml_cgr
             ggml_gallocr_allocate_node(galloc, graph->nodes[i], get_node_buffer_id(node_buffer_ids, i));
         }
 
+        // xzl: also check parent (for inputs)? why? 
         for (int j = 0; j < GGML_MAX_SRC; j++) {
             struct ggml_tensor * src = node->src[j];
             if (src == NULL) {
@@ -590,7 +601,7 @@ static void ggml_gallocr_alloc_graph_impl(ggml_gallocr_t galloc, struct ggml_cgr
         }
     }
 
-    // allocate tensors
+    // allocate tensors             xzl: what's diff vs the above pass?
     for (int i = 0; i < graph->n_nodes; i++) {
         struct ggml_tensor * node = graph->nodes[i];
         int buffer_id = get_node_buffer_id(node_buffer_ids, i);
@@ -652,6 +663,8 @@ static void ggml_gallocr_alloc_graph_impl(ggml_gallocr_t galloc, struct ggml_cgr
     }
 }
 
+// xzl: first calc tensor alloc, then call backend to resize the bufs...
+//          that's why it's called "reserve"
 bool ggml_gallocr_reserve_n(ggml_gallocr_t galloc, struct ggml_cgraph * graph, const int * node_buffer_ids) {
     size_t hash_size = graph->visited_hash_table.size;
 
@@ -732,7 +745,7 @@ bool ggml_gallocr_reserve_n(ggml_gallocr_t galloc, struct ggml_cgraph * graph, c
             fprintf(stderr, "%s: reallocating %s buffer from size %.02f MiB to %.02f MiB\n", __func__, ggml_backend_buft_name(galloc->bufts[i]), cur_size / 1024.0 / 1024.0, new_size / 1024.0 / 1024.0);
 #endif
             ggml_backend_buffer_free(galloc->buffers[i]);
-            galloc->buffers[i] = ggml_backend_buft_alloc_buffer(galloc->bufts[i], new_size);
+            galloc->buffers[i] = ggml_backend_buft_alloc_buffer(galloc->bufts[i], new_size); // xzl: goes to, e.g. metal
             if (galloc->buffers[i] == NULL) {
                 fprintf(stderr, "%s: failed to allocate %s buffer of size %zu\n", __func__, ggml_backend_buft_name(galloc->bufts[i]), new_size);
                 return false;
@@ -747,6 +760,8 @@ bool ggml_gallocr_reserve(ggml_gallocr_t galloc, struct ggml_cgraph *graph) {
     return ggml_gallocr_reserve_n(galloc, graph, NULL);
 }
 
+// xzl: this seems to call backend to "commit" the allocation by ggml
+//      tensor_alloc is alloc info for a specific tensor. it's ready. now find  the actual tesnor data ptr? 
 static void ggml_gallocr_init_tensor(ggml_gallocr_t galloc, struct ggml_tensor * node, int buffer_id, struct tensor_alloc * tensor_alloc) {
     assert(node->data || node->view_src || ggml_backend_buffer_get_alloc_size(galloc->buffers[buffer_id], node) <= tensor_alloc->size_max);
 
@@ -760,7 +775,7 @@ static void ggml_gallocr_init_tensor(ggml_gallocr_t galloc, struct ggml_tensor *
             ggml_backend_view_init(galloc->buffers[buffer_id], node);
         }
     } else {
-        if (node->data == NULL) {
+        if (node->data == NULL) {   // xzl: the cpu path... mem from host backing buffer
             assert(tensor_alloc->offset != SIZE_MAX);
             assert(ggml_backend_buffer_get_alloc_size(galloc->buffers[buffer_id], node) <= tensor_alloc->size_max);
             void * base = ggml_backend_buffer_get_base(galloc->buffers[buffer_id]);
@@ -824,13 +839,14 @@ static bool ggml_gallocr_needs_realloc(ggml_gallocr_t galloc, struct ggml_cgraph
     return false;
 }
 
+// xzl: first calc the "assignments", then call backends for allocation allocation api?
 bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph) {
     if (ggml_gallocr_needs_realloc(galloc, graph)) {
         if (galloc->n_buffers == 1) {
 #ifndef NDEBUG
             fprintf(stderr, "%s: reallocating buffers automatically\n", __func__);
 #endif
-            if (!ggml_gallocr_reserve(galloc, graph)) {
+            if (!ggml_gallocr_reserve(galloc, graph)) {  // xzl: reserve engouh buf (from backend)
                 return false;
             }
         } else {
@@ -845,11 +861,13 @@ bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph)
     for (int i = 0; i < galloc->n_buffers; i++) {
         // zero size buffers are not allocated
         if (galloc->buffers[i] != NULL) {
-            ggml_backend_buffer_reset(galloc->buffers[i]);
+            ggml_backend_buffer_reset(galloc->buffers[i]);  // xzl: goes to backend specific ...
         }
     }
 
     // allocate the graph tensors from the previous assignments
+    //      xzl: here, "assignments" seem node_alloc (alloc info, buf id, offset, etc)?
+    //      below actually find data ptr for tensors? (fullfil such "assignments"?)
     // nodes
     for (int i = 0; i < graph->n_nodes; i++) {
         struct ggml_tensor * node = graph->nodes[i];
@@ -859,6 +877,7 @@ bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph)
             if (src == NULL) {
                 continue;
             }
+            // xzl: also init parent tensors?? why needed
             ggml_gallocr_init_tensor(galloc, src, node_alloc->buffer_id, &node_alloc->src[j]);
         }
         ggml_gallocr_init_tensor(galloc, node, node_alloc->buffer_id, &node_alloc->dst);
@@ -888,7 +907,7 @@ static bool alloc_tensor_range(struct ggml_context * ctx,
         struct ggml_tensor * first, struct ggml_tensor * last,
         ggml_backend_buffer_type_t buft, size_t size,
         ggml_backend_buffer_t ** buffers, size_t * n_buffers) {
-    ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(buft, size);
+    ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(buft, size);  // xzl: goes to backend, e.g. metal
     if (buffer == NULL) {
 #ifndef NDEBUG
         fprintf(stderr, "%s: failed to allocate %s buffer of size %zu\n", __func__, ggml_backend_buft_name(buft), size);
@@ -990,6 +1009,8 @@ ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_conte
     return buffer;
 }
 
+// xzl: given a "ctx", iterate thorugh its tensors, allocating mem for them from ctx's mem_buf
+//      what's diff vs graph allocator? (there's no graph involved?)
 ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors(struct ggml_context * ctx, ggml_backend_t backend) {
     return ggml_backend_alloc_ctx_tensors_from_buft(ctx, ggml_backend_get_default_buffer_type(backend));
 }

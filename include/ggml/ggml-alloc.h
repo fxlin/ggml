@@ -23,6 +23,8 @@ GGML_API void           ggml_tallocr_alloc(ggml_tallocr_t talloc, struct ggml_te
     ggml_gallocr_t galloc = ggml_gallocr_new(ggml_bacckend_cpu_buffer_type());
 
     // optional: create a worst-case graph and reserve the buffers to avoid reallocations
+    // xzl: meaning trying to dry-build a graph with maximum input (hence maximum mem alloc situation)
+    //      the graph is used for mem reserve only
     ggml_gallocr_reserve(galloc, build_graph(max_batch));
 
     // allocate the graph
@@ -45,14 +47,16 @@ GGML_API ggml_gallocr_t ggml_gallocr_new(ggml_backend_buffer_type_t buft);
 GGML_API ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs);
 GGML_API void           ggml_gallocr_free(ggml_gallocr_t galloc);
 
-// pre-allocate buffers from a measure graph - does not allocate or modify the graph
+// pre-allocate buffers from a measure graph - does not allocate or modify the graph 
 // call with a worst-case graph to avoid buffer reallocations
 // not strictly required for single buffer usage: ggml_gallocr_alloc_graph will reallocate the buffers automatically if needed
 // returns false if the buffer allocation failed
+// xzl: meaning this is the way to "preallocate" buffer before actual eval?? 
+//      cf: whisper_allocr_graph_init()
 GGML_API bool ggml_gallocr_reserve(ggml_gallocr_t galloc, struct ggml_cgraph * graph);
 GGML_API bool ggml_gallocr_reserve_n(ggml_gallocr_t galloc, struct ggml_cgraph * graph, const int * node_buffer_ids);
 
-// automatic reallocation if the topology changes when using a single buffer
+// automatic reallocation if the topology changes when using a single buffer  (xzl: means what)
 // returns false if using multiple buffers and a re-allocation is needed (call ggml_gallocr_reserve_n first to set the node buffers)
 GGML_API bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph);
 
@@ -60,6 +64,7 @@ GGML_API size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_i
 
 // Utils
 // Create a buffer and allocate all the tensors in a ggml_context
+//    xzl:"create a buffer" means what? 
 GGML_API struct ggml_backend_buffer * ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_context * ctx, ggml_backend_buffer_type_t buft);
 GGML_API struct ggml_backend_buffer * ggml_backend_alloc_ctx_tensors(struct ggml_context * ctx, ggml_backend_t backend);
 

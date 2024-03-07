@@ -171,6 +171,7 @@ static bool ggml_graph_compute_helper(
     return ggml_graph_compute(graph, &plan);
 }
 
+// xzl: the eval entry for a given graph...
 static bool ggml_graph_compute_helper(
        struct ggml_backend * backend,
         struct ggml_cgraph * graph,
@@ -769,7 +770,7 @@ struct whisper_state {
     // shared between all decoders
     whisper_kv_cache kv_cross;
 
-    whisper_mel mel;
+    whisper_mel mel;        // xzl: the mel data ... as output from mel layer?
 
     whisper_batch batch;
 
@@ -790,8 +791,8 @@ struct whisper_state {
     struct ggml_tensor * embd_enc  = nullptr;
 
     // helpers for GPU offloading
-    std::vector<float> inp_mel;
-    std::vector<float> inp_mask;
+    std::vector<float> inp_mel;     // xzl: mel input?
+    std::vector<float> inp_mask;    //      input mask?
 
     // decode output (2-dimensional array: [n_tokens][n_vocab])
     std::vector<float> logits;
@@ -1591,7 +1592,7 @@ static bool whisper_model_load(struct whisper_model_loader * loader, whisper_con
         }
     }
 
-    wctx.t_load_us = ggml_time_us() - t_start_us;
+    wctx.t_load_us = ggml_time_us() - t_start_us;   // xzl: can use this for dbg
 
     return true;
 }
@@ -1620,10 +1621,11 @@ static struct ggml_cgraph * whisper_build_graph_conv(
     const auto & model   = wctx.model;
     const auto & hparams = model.hparams;
 
+    // xzl: 1500 default
     const int n_ctx   = wstate.exp_n_audio_ctx > 0 ? wstate.exp_n_audio_ctx : hparams.n_audio_ctx;
     const int n_state = hparams.n_audio_state; GGML_UNUSED(n_state);
 
-    const int n_mels = hparams.n_mels;
+    const int n_mels = hparams.n_mels; // xzl: 80
 
     struct ggml_init_params params = {
         /*.mem_size   =*/ wstate.alloc_conv.meta.size(),
@@ -1635,9 +1637,9 @@ static struct ggml_cgraph * whisper_build_graph_conv(
 
     ggml_cgraph * gf = ggml_new_graph(ctx0);
 
-    struct ggml_tensor * mel = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 2*n_ctx, n_mels);
+    struct ggml_tensor * mel = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 2*n_ctx, n_mels); // xzl: why 2x
     ggml_set_name(mel, "mel");
-    ggml_set_input(mel);
+    ggml_set_input(mel);        // xzl: mark as an inpiut tesnor...
 
     struct ggml_tensor * cur = nullptr;
 
@@ -1664,6 +1666,9 @@ static struct ggml_cgraph * whisper_build_graph_conv(
 
         ggml_set_name(cur, "embd_enc");
         wstate.embd_enc = cur;
+        // xzl: in this case, no connection between mel and cur? both will be added 
+        // to graph though. 
+        // this path is not taken. oh well....
     }
 
     ggml_build_forward_expand(gf, cur);
@@ -1987,6 +1992,7 @@ static struct ggml_cgraph * whisper_build_graph_cross(
 //   - n_threads:  number of threads to use
 //   - mel_offset: offset in the mel spectrogram (i.e. audio offset)
 //
+// xzl: build graphs on the fly.... conv, enc, dec...
 static bool whisper_encode_internal(
         whisper_context & wctx,
           whisper_state & wstate,
@@ -2000,7 +2006,7 @@ static bool whisper_encode_internal(
     {
         auto & alloc = wstate.alloc_conv.alloc;
 
-        ggml_cgraph * gf = whisper_build_graph_conv(wctx, wstate);
+        ggml_cgraph * gf = whisper_build_graph_conv(wctx, wstate);  
 
         if (!ggml_gallocr_alloc_graph(alloc, gf)) {
             // should never happen as we pre-allocate the memory
@@ -2009,7 +2015,8 @@ static bool whisper_encode_internal(
 
         struct ggml_tensor * mel = ggml_graph_get_tensor(gf, "mel");
 
-        // set the input
+        // set the input        
+        // xzl: copy data from waste.mel, will use FP buffer in wstate.inp_mel to back the tensor "mel"
         {
             const auto & mel_inp = wstate.mel;
             const int n_ctx      = wstate.exp_n_audio_ctx > 0 ? wstate.exp_n_audio_ctx : wctx.model.hparams.n_audio_ctx;
@@ -2017,7 +2024,7 @@ static bool whisper_encode_internal(
             assert(mel->type == GGML_TYPE_F32);
             assert(mel_inp.n_mel == wctx.model.hparams.n_mels);
 
-            wstate.inp_mel.resize(ggml_nelements(mel));
+            wstate.inp_mel.resize(ggml_nelements(mel)); // xzl: alloc space in backing buf...
 
             float * dst = wstate.inp_mel.data();
             memset(dst, 0, ggml_nbytes(mel));
@@ -2025,6 +2032,7 @@ static bool whisper_encode_internal(
             const int i0 = std::min(mel_offset,           mel_inp.n_len);
             const int i1 = std::min(mel_offset + 2*n_ctx, mel_inp.n_len);
 
+            // xzl: reshape mel? row major?
             for (int j = 0; j < mel_inp.n_mel; ++j) {
                 for (int i = i0; i < i1; ++i) {
                     dst[j*2*n_ctx + (i - i0)] = mel_inp.data[j*mel_inp.n_len + i];
@@ -2034,6 +2042,10 @@ static bool whisper_encode_internal(
             ggml_backend_tensor_set(mel, wstate.inp_mel.data(), 0, ggml_nelements(mel)*sizeof(float));
         }
 
+        // printf("xzl: dump graph...\n");
+        // ggml_graph_dump_dot(gf, NULL, "whisper-conv.dot");
+
+        // xzl: actually eval the conv graph...
         if (!whisper_encode_external(wstate)) {
             if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
                 return false;
@@ -2052,6 +2064,10 @@ static bool whisper_encode_internal(
         auto & alloc = wstate.alloc_encode.alloc;
 
         ggml_cgraph * gf = whisper_build_graph_encoder(wctx, wstate);
+
+        // xzl added
+        //printf("xzl: dump graph...\n");
+        //ggml_graph_dump_dot(gf, NULL, "whisper-enc.dot");
 
         if (!ggml_gallocr_alloc_graph(alloc, gf)) {
             // should never happen as we pre-allocate the memory
@@ -2763,7 +2779,7 @@ static bool log_mel_spectrogram(
 
 
     // Calculate the length of padding
-    int64_t stage_1_pad = WHISPER_SAMPLE_RATE * 30;
+    int64_t stage_1_pad = WHISPER_SAMPLE_RATE * 30;     // xzl: 30sec...
     int64_t stage_2_pad = frame_size / 2;
 
     // Initialize a vector and copy data from C array to it.
@@ -4928,6 +4944,7 @@ static void whisper_sequence_score(
     }
 }
 
+// xzl: main entry ... pcm->mel->conv->enc->dec...
 int whisper_full_with_state(
         struct whisper_context * ctx,
           struct whisper_state * state,
@@ -5785,6 +5802,7 @@ int whisper_full(
     return whisper_full_with_state(ctx, ctx->state, params, samples, n_samples);
 }
 
+// xzl: the cpu wrapper for whisper_full_with_state()?
 int whisper_full_parallel(
         struct whisper_context * ctx,
         struct whisper_full_params params,

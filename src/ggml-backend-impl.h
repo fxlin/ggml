@@ -15,6 +15,7 @@ extern "C" {
     // buffer type
     typedef void * ggml_backend_buffer_type_context_t;
 
+    // xzl: feels like banckend specific methoid for memory alloc...
     struct ggml_backend_buffer_type_i {
         const char *          (*GGML_CALL get_name)        (ggml_backend_buffer_type_t buft);
         ggml_backend_buffer_t (*GGML_CALL alloc_buffer)    (ggml_backend_buffer_type_t buft, size_t size);
@@ -35,6 +36,7 @@ extern "C" {
     // buffer
     typedef void * ggml_backend_buffer_context_t;
 
+    // xzl: backend specific methods for tensor manipulation...... 
     struct ggml_backend_buffer_i {
         const char * (*GGML_CALL get_name)   (ggml_backend_buffer_t buffer);
         void         (*GGML_CALL free_buffer)(ggml_backend_buffer_t buffer);

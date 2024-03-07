@@ -147,7 +147,7 @@ void ggml_print_backtrace(void) {
 }
 #endif
 
-/*#define GGML_PERF*/
+/*#define GGML_PERF         xzl: as cmakelist options */
 #define GGML_DEBUG 0
 #define GGML_GELU_FP16
 #define GGML_GELU_QUICK_FP16
@@ -1975,7 +1975,7 @@ static void ggml_setup_op_has_task_pass(void) {
 
 struct ggml_context {
     size_t mem_size;
-    void * mem_buffer;
+    void * mem_buffer;              // xzl: the mem that backs tensors?
     bool   mem_buffer_owned;
     bool   no_alloc;
     bool   no_alloc_save; // this is used to save the no_alloc state when using scratch buffers
@@ -2033,7 +2033,7 @@ struct ggml_state {
 static struct ggml_state g_state;
 static atomic_int g_state_barrier = 0;
 
-// barrier via spin lock
+// barrier via spin lock        xzl: only used for init/free, so no big deal
 inline static void ggml_critical_section_start(void) {
     int processing = atomic_fetch_add(&g_state_barrier, 1);
 
@@ -2429,6 +2429,7 @@ static inline int ggml_up(int n, int m) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// xzl: will also alloc ctx mem_buffer
 struct ggml_context * ggml_init(struct ggml_init_params params) {
     // make this function thread safe
     ggml_critical_section_start();
@@ -3404,7 +3405,8 @@ struct ggml_tensor * ggml_dup_inplace(
 
 // ggml_add
 
-// xzl: just record the graph, no actual computation?
+// xzl: just record the graph, no actual computation. return a diff tensor (although underlying)
+//      buffer may be reused
 static struct ggml_tensor * ggml_add_impl(
         struct ggml_context * ctx,
         struct ggml_tensor * a,
@@ -5506,7 +5508,7 @@ static int64_t ggml_calc_conv_output_size(int64_t ins, int64_t ks, int s, int p,
     return (ins + 2 * p - d * (ks - 1) - 1) / s + 1;
 }
 
-// xzl: conv1d .. implemented as im2col then mulmat
+// xzl: conv1d .. implemented as im2col, reshape, then mulmat
 GGML_API struct ggml_tensor * ggml_conv_1d(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
@@ -6219,7 +6221,7 @@ static struct ggml_tensor * ggml_unary_impl(
 
     ggml_set_op_params_i32(result, 0, (int32_t) op);
 
-    result->op   = GGML_OP_UNARY;
+    result->op   = GGML_OP_UNARY;   // xzl: b/c of this, graph dump wont show gleu, relu, etc...
     result->grad = is_node ? ggml_dup_tensor(ctx, result) : NULL;
     result->src[0] = a;
 
@@ -15342,7 +15344,11 @@ static void ggml_compute_forward_cross_entropy_loss_back(
 }
 
 /////////////////////////////////
-// xzl: main entry... for evaluating a graph... params contains thread idx already. 
+// xzl: main entry... for evaluating a node ... 
+//  called from a single worker thread. 
+//   params contains: thread idx (ith) and total thread # (nth) 
+//      so that the thread knows its portion of the tensor to work on
+//      also: type, indicates which "pass" (init/compute/final) the task should work won
 static void ggml_compute_forward(struct ggml_compute_params * params, struct ggml_tensor * tensor) {
     GGML_ASSERT(params);
 
@@ -16776,6 +16782,7 @@ static void ggml_compute_backward(struct ggml_context * ctx, struct ggml_tensor 
     }
 }
 
+// xzl: recursive traversal. depth first
 static void ggml_visit_parents(struct ggml_cgraph * cgraph, struct ggml_tensor * node) {
     if (node->grad == NULL) {
         // this usually happens when we generate intermediate nodes from constants in the backward pass
@@ -16805,10 +16812,10 @@ static void ggml_visit_parents(struct ggml_cgraph * cgraph, struct ggml_tensor *
         GGML_ASSERT(cgraph->n_leafs < cgraph->size);
 
         if (strlen(node->name) == 0) {
-            ggml_format_name(node, "leaf_%d", cgraph->n_leafs);
+            ggml_format_name(node, "leaf_%d", cgraph->n_leafs); // xzl: assing name...
         }
 
-        cgraph->leafs[cgraph->n_leafs] = node;
+        cgraph->leafs[cgraph->n_leafs] = node; // xzl: add to graph's leaf list
         cgraph->n_leafs++;
     } else {
         GGML_ASSERT(cgraph->n_nodes < cgraph->size);
@@ -16817,7 +16824,7 @@ static void ggml_visit_parents(struct ggml_cgraph * cgraph, struct ggml_tensor *
             ggml_format_name(node, "node_%d", cgraph->n_nodes);
         }
 
-        cgraph->nodes[cgraph->n_nodes] = node;
+        cgraph->nodes[cgraph->n_nodes] = node;  // xzl: add to graph's node list
         if (cgraph->grads) {
             cgraph->grads[cgraph->n_nodes] = node->grad;
         }
@@ -16825,6 +16832,7 @@ static void ggml_visit_parents(struct ggml_cgraph * cgraph, struct ggml_tensor *
     }
 }
 
+// xzl: this seems: go from tensor, add all parents to cgraph's node list. in DFS order. 
 static void ggml_build_forward_impl(struct ggml_cgraph * cgraph, struct ggml_tensor * tensor, bool expand) {
     if (!expand) {
         // TODO: this branch isn't accessible anymore, maybe move this to ggml_build_forward_expand
@@ -16834,7 +16842,7 @@ static void ggml_build_forward_impl(struct ggml_cgraph * cgraph, struct ggml_ten
     const int n0 = cgraph->n_nodes;
     UNUSED(n0);
 
-    ggml_visit_parents(cgraph, tensor);
+    ggml_visit_parents(cgraph, tensor);     
 
     const int n_new = cgraph->n_nodes - n0;
     GGML_PRINT_DEBUG("%s: visited %d new nodes\n", __func__, n_new);
@@ -16845,6 +16853,7 @@ static void ggml_build_forward_impl(struct ggml_cgraph * cgraph, struct ggml_ten
     }
 }
 
+// xzl: travrse the graph for fwd?? does not eval. expand: means adding all parents from the node
 void ggml_build_forward_expand(struct ggml_cgraph * cgraph, struct ggml_tensor * tensor) {
     ggml_build_forward_impl(cgraph, tensor, true);
 }
@@ -17172,7 +17181,7 @@ struct ggml_compute_state_shared {
 
     const int n_threads;
 
-    // synchronization primitives
+    // synchronization primitives       xzl: threads will spin on these atmoic vars...
     atomic_int n_active;  // num active threads
     atomic_int node_n;    // active graph node
     atomic_int node_task; // active graph node task phase
@@ -17196,7 +17205,7 @@ static void ggml_graph_compute_perf_stats_node(struct ggml_tensor * node, const 
     node->perf_time_us += time_us_cur;
 }
 
-// xzl: decides (cpu) parallelism per op... 
+// xzl: decides # of tasks  parallelism per op... (cpu)
 static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
     int n_tasks = 0;
 
@@ -17455,7 +17464,7 @@ static void ggml_graph_compute_thread_sync_task(int * task_phase, struct ggml_co
     }
 }
 
-// xzl: the graph level entry... (exec in work therads... thread pool. (clearly cpu!))
+// xzl: the graph level entry... (exec by work therads... thread pool. (clearly cpu!))
 //  xzl: state->shared is among all workers threads; params is thread local 
 static thread_ret_t ggml_graph_compute_thread(void * data) {
     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
@@ -17467,7 +17476,7 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
 
     set_numa_thread_affinity(state->ith);
 
-    int node_n     = -1;
+    int node_n     = -1;        // xzl: idx into graph->nodes
     int task_phase = GGML_TASK_TYPE_FINALIZE;
 
     while (true) {
@@ -17476,28 +17485,29 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             return (thread_ret_t) GGML_EXIT_ABORTED;
         }
 
-        if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) { // xzl: 1st worker?
+        if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) { // xzl: this thread is 1st worker ....
             // all other threads are finished and spinning
-            // do finalize and init here so we don't have synchronize again   xzl: meaning what
+            // do finalize and init here so we don't have synchronize again   
+            //      xzl: meaning finalize the prev node, and init the next node...??
             struct ggml_compute_params params = {
-                /*.type  =*/ GGML_TASK_TYPE_FINALIZE,
-                /*.ith   =*/ 0,
+                /*.type  =*/ GGML_TASK_TYPE_FINALIZE, // xzl: speicfy to run the op's final pass
+                /*.ith   =*/ 0,         // xzl: specify this is thread 0
                 /*.nth   =*/ 0,
                 /*.wsize =*/ cplan->work_size,
                 /*.wdata =*/ cplan->work_data,
             };
 
             if (node_n != -1) {
-                /* FINALIZE xzl: meaning a node (op) has ??? -- eval the node */
+                /* FINALIZE */
                 struct ggml_tensor * node = cgraph->nodes[node_n];
-                if (GGML_OP_HAS_FINALIZE[node->op]) {
+                if (GGML_OP_HAS_FINALIZE[node->op]) { // xzl: the op has a "final" pass...
                     params.nth = ggml_get_n_tasks(node, n_threads);
-                    ggml_compute_forward(&params, node); // xzl: recursion? spawn more tasks?
+                    ggml_compute_forward(&params, node); 
                 }
-                ggml_graph_compute_perf_stats_node(node, state->shared);
+                ggml_graph_compute_perf_stats_node(node, state->shared); //xzl: the node is done
             }
 
-            // distribute new work or execute it direct if 1T
+            // distribute new work or execute it direct if 1T       xzl:1T-total 1 task
             while (++node_n < cgraph->n_nodes) {
                 GGML_PRINT_DEBUG_5("%s: %d/%d\n", __func__, node_n, cgraph->n_nodes);
                 struct ggml_tensor * node = cgraph->nodes[node_n];
@@ -17511,12 +17521,14 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
                 if (n_tasks == 1) {
                     /* INIT */
                     if (GGML_OP_HAS_INIT[node->op]) {
-                        params.type = GGML_TASK_TYPE_INIT;
-                        ggml_compute_forward(&params, node);
+                        params.type = GGML_TASK_TYPE_INIT;  // xzl: run the op's "init" pass
+                        ggml_compute_forward(&params, node);    
                     }
 
                     // TODO: maybe push node_n to the atomic but if other threads see n_tasks is 1,
                     // they do something more efficient than spinning (?)
+                    // xzl: ^^ implies that other threads can eval other nodes, while THIS thread is 
+                    //      the only one evaluating THIS node (compute pass, which may take time)?
                     params.type = GGML_TASK_TYPE_COMPUTE;
                     ggml_compute_forward(&params, node);
 
@@ -17534,18 +17546,22 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
                     break;
                 }
             }
+            // xzl: now we reach a node requierirng >1 tasks... 
 
             task_phase = GGML_TASK_TYPE_INIT;
+            // xzl: below, signify other workers (>2nd) to continue...
             atomic_store(&state->shared->n_active,  n_threads);
             atomic_store(&state->shared->node_n,    node_n);
             atomic_store(&state->shared->node_task, task_phase);
-        } else {  // xzl: 2+ workers..
-            ggml_graph_compute_thread_sync_node(&node_n,     state, false);
+        } else {  // xzl: this thread is >= 2nd worker... wait for a new node and a new "pass"...
+            ggml_graph_compute_thread_sync_node(&node_n,     state, false);     
             ggml_graph_compute_thread_sync_task(&task_phase, state, false);
         }
 
         // check if we should stop
         if (node_n >= cgraph->n_nodes) break;
+
+        // xzl: below, parallelize op over >1 threads. move through the init->compute->finalize FSM...
 
         /* INIT & COMPUTE */
         struct ggml_tensor * node = cgraph->nodes[node_n];
@@ -17577,6 +17593,7 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             //       ref: https://github.com/ggerganov/ggml/issues/291
             // UPD:  adding the do_yield flag seems to resolve the issue universally
             const bool do_yield = node_n < 0 || cgraph->nodes[node_n]->op == GGML_OP_MUL_MAT;
+            // xzl: only yield for 1st node, or mulmat?? otherwise spinning??
             ggml_graph_compute_thread_sync_task(&task_phase, state, do_yield);
         }
 
@@ -17598,6 +17615,7 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
     return GGML_EXIT_SUCCESS;
 }
 
+// xzl: basicaly determine # tasks, work buffer size. 
 struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threads) {
     if (n_threads <= 0) {
         n_threads = GGML_DEFAULT_N_THREADS;
@@ -17618,7 +17636,8 @@ struct ggml_cplan ggml_graph_plan(const struct ggml_cgraph * cgraph, int n_threa
 
         max_tasks = MAX(max_tasks, n_tasks);
 
-        size_t cur = 0;
+        size_t cur = 0;     // xzl: current est for "work size" (work buffer size) 
+                            //          for some ops, why X n_tasks? like each task does acc independelty?
 
         switch (node->op) {
             case GGML_OP_CPY:
@@ -17838,6 +17857,7 @@ int ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
                 .shared = &state_shared,
             };
             // xzl: worker threads, and dispatch graph to them
+            //      vtune lost track of func names within each thread... 
             const int rc = ggml_thread_create(&workers[j].thrd, NULL, ggml_graph_compute_thread, &workers[j]);
             GGML_ASSERT(rc == 0);
             UNUSED(rc);
@@ -18477,6 +18497,7 @@ static void ggml_graph_dump_dot_leaf_edge(FILE * fp, struct ggml_tensor * node, 
             label);
 }
 
+// xzl: gb-backward, gf-forward? or just two graphs to plot? gf can ben NULL
 void ggml_graph_dump_dot(const struct ggml_cgraph * gb, const struct ggml_cgraph * gf, const char * filename) {
     char color[16];
 

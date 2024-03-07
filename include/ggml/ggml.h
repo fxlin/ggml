@@ -518,7 +518,7 @@ extern "C" {
         GGML_TENSOR_FLAG_PARAM  = 4,
     };
 
-    // ggml object
+    // ggml object                      xzl: in a linked list
     struct ggml_object {
         size_t offs;
         size_t size;
@@ -566,7 +566,7 @@ extern "C" {
         struct ggml_tensor * view_src;
         size_t               view_offs;
 
-        void * data;
+        void * data;                    // xzl: point to host buf?
 
         char name[GGML_MAX_NAME];
 
@@ -612,9 +612,9 @@ extern "C" {
         int n_nodes;
         int n_leafs;
 
-        struct ggml_tensor ** nodes;
+        struct ggml_tensor ** nodes;    // xzl: these nodes are eval in order??  node with compute (op)
         struct ggml_tensor ** grads;
-        struct ggml_tensor ** leafs;
+        struct ggml_tensor ** leafs;    // xzl: const, inputs, i.e. nodes w/o compute
 
         struct ggml_hash_set visited_hash_table;
 
@@ -652,7 +652,7 @@ extern "C" {
     };
 
     struct ggml_compute_params {
-        enum ggml_task_type type;
+        enum ggml_task_type type;        // xzl: for a thread, which "phase" (init/compute/final) of an op to exec
 
         // ith = thread index, nth = number of threads
         int ith, nth;
@@ -1906,6 +1906,7 @@ extern "C" {
             struct ggml_tensor  * tensor);
 
 
+        // xzl: build graph?? starting from tensor?
     GGML_API void ggml_build_forward_expand (struct ggml_cgraph * cgraph, struct ggml_tensor * tensor);
     GGML_API void ggml_build_backward_expand(struct ggml_context * ctx, struct ggml_cgraph * gf, struct ggml_cgraph * gb, bool keep);
 
