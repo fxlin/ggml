@@ -1,3 +1,4 @@
+// xzl: seems to test speed of Accelerate framework also check res against  naive impl.
 #include "ggml.h"
 
 #include <stdint.h>

@@ -9,7 +9,7 @@ int main(int argc, const char ** argv) {
     struct ggml_init_params params = {
         .mem_size   = 128*1024*1024,
         .mem_buffer = NULL,
-        .no_alloc   = false,
+        .no_alloc   = false,            // xzl: no alloc context... means alloc as we eval? (i.e. graph compute "with ctx")?
     };
 
     struct ggml_context * ctx0 = ggml_init(params);

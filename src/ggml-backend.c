@@ -267,6 +267,7 @@ void ggml_backend_graph_plan_compute(ggml_backend_t backend, ggml_backend_graph_
     backend->iface.graph_plan_compute(backend, plan);
 }
 
+// xzl: what's diff vs. ggml_graph_compute_with_ctx? thi sone does not need a ctx?
 bool ggml_backend_graph_compute(ggml_backend_t backend, struct ggml_cgraph * cgraph) {
     return backend->iface.graph_compute(backend, cgraph);
 }

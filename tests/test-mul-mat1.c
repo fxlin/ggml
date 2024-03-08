@@ -1,3 +1,7 @@
+// xzl: tested idffernet methods (algos) for matmul? FP format etc. 
+// argv1 is method id (1,2...4)
+// noithign to do with ggml APIs?
+
 #include <stdint.h>
 #include <stdio.h>
 #include <assert.h>

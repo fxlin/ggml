@@ -1,3 +1,4 @@
+// xzl: optimizer test code...
 #include "ggml.h"
 
 #include <cmath>

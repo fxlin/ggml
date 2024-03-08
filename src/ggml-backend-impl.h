@@ -98,7 +98,7 @@ extern "C" {
         void                      (*GGML_CALL graph_plan_free)   (ggml_backend_t backend, ggml_backend_graph_plan_t plan);
         void                      (*GGML_CALL graph_plan_compute)(ggml_backend_t backend, ggml_backend_graph_plan_t plan);
 
-        // compute graph without a plan (async)  xzl: also for eval a graph...
+        // compute graph without a plan (async)  xzl: eval a graph...
         bool (*GGML_CALL graph_compute)(ggml_backend_t backend, struct ggml_cgraph * cgraph);
 
         // check if the backend supports an operation

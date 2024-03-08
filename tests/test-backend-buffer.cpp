@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// xzl: shows how to use backenkd apis to direclty alloc a backend buf, and alloc tensors on it. 
+//  no graph alloc involved...
 
 static bool is_pow2(size_t x) {
     return (x & (x - 1)) == 0;

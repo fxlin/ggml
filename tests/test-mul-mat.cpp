@@ -29,6 +29,7 @@ struct test_model {
     struct ggml_context * ctx;
 };
 
+// xzl: alloc a backend buf ... for weight tensors
 void load_model(test_model & model, float* a, float* b, int M, int N, int K, bool use_gpu = false) {
     size_t buffer_size = 0;
     {
@@ -127,7 +128,7 @@ struct ggml_cgraph * build_graph(const test_model& model) {
         /*.no_alloc   =*/ true, // the tensors will be allocated later by ggml_gallocr_alloc_graph()
     };
 
-    // create a temporally context to build the graph
+    // create a temporally context to build the graph           xzl: why need a context... ?
     struct ggml_context * ctx0 = ggml_init(params0);
 
     struct ggml_cgraph * gf = ggml_new_graph(ctx0);
@@ -232,7 +233,8 @@ static void gemm_f16_out_f32(int m, int n, int k,
     }
 }
 
-
+// xzl: cpu impl, 1 thread (but emulate multthread tiling schedule...)
+//          lowest level is vec dot
 void perform_gemm_test(float* a, float* b, float* expected, int M, int N, int K) {
     printf("\nPerforming gemm_f16_out_f32 test:\n");
 
@@ -305,6 +307,8 @@ int main(void)
 
     test_model model;
     load_model(model, matrixA, matrixB, M, N, K, true);
+
+    // xzl: below a common pattern.. first do reservation. then build another graph and 
 
     ggml_gallocr_t allocr = NULL;
 

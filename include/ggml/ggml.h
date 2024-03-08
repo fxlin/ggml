@@ -523,7 +523,7 @@ extern "C" {
         size_t offs;            // xzl: seems to point the tensor head for this obj, offset as in the context's buf
         size_t size;
 
-        struct ggml_object * next;
+        struct ggml_object * next;              // xzl : objs  linked
 
         enum ggml_object_type type;
 

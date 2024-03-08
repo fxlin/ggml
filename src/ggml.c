@@ -17914,6 +17914,7 @@ int ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
 }
 
 // xzl: alloc the work buffer (for eval) from ctx, and start to eval...?
+//              mem alloc on the fly? (no graph allocator invoked?)
 void ggml_graph_compute_with_ctx(struct ggml_context * ctx, struct ggml_cgraph * cgraph, int n_threads) {
     struct ggml_cplan cplan = ggml_graph_plan(cgraph, n_threads);
 

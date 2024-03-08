@@ -1020,6 +1020,7 @@ ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_conte
 
 // xzl: given a "ctx", iterate thorugh its tensors, allocating mem for them from ctx's mem_buf
 //      what's diff vs graph allocator? (there's no graph involved?)
+// related:       https://github.com/ggerganov/ggml/issues/578
 ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors(struct ggml_context * ctx, ggml_backend_t backend) {
     return ggml_backend_alloc_ctx_tensors_from_buft(ctx, ggml_backend_get_default_buffer_type(backend));
 }
