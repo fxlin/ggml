@@ -961,6 +961,7 @@ ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_conte
 
     size_t cur_buf_size = 0;        // xzl: how much allocated from current backend buf
     struct ggml_tensor * first = ggml_get_first_tensor(ctx);
+    // xzl
     for (struct ggml_tensor * t = first; t != NULL; t = ggml_get_next_tensor(ctx, t)) {
         size_t this_size = 0;       // xzl: alloc size for this tensor?
         if (t->data == NULL && t->view_src == NULL) {

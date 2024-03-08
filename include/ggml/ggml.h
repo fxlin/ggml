@@ -520,7 +520,7 @@ extern "C" {
 
     // ggml object                      xzl: in a linked list
     struct ggml_object {
-        size_t offs;
+        size_t offs;            // xzl: seems to point the tensor head for this obj, offset as in the context's buf
         size_t size;
 
         struct ggml_object * next;
