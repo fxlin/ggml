@@ -840,7 +840,7 @@ static bool ggml_gallocr_needs_realloc(ggml_gallocr_t galloc, struct ggml_cgraph
     return false;
 }
 
-// xzl: first calc the "assignments", then call backends for allocation allocation api?
+// xzl: alloc tensors per a previous "measure run" which builds a "measure" graph and reserved memory (with galloc?) already 
 bool ggml_gallocr_alloc_graph(ggml_gallocr_t galloc, struct ggml_cgraph * graph) {
     if (ggml_gallocr_needs_realloc(galloc, graph)) {
         if (galloc->n_buffers == 1) {

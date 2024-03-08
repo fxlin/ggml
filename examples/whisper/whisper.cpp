@@ -2061,7 +2061,7 @@ static bool whisper_encode_internal(
 
     // encoder
     if (!whisper_encode_external(wstate)) {
-        auto & alloc = wstate.alloc_encode.alloc;
+        auto & alloc = wstate.alloc_encode.alloc;       // xzl: this galloc already reserved enough mem from measurement run....
 
         ggml_cgraph * gf = whisper_build_graph_encoder(wctx, wstate);
 
@@ -2081,7 +2081,7 @@ static bool whisper_encode_internal(
 
     // cross
     {
-        auto & alloc = wstate.alloc_cross.alloc;
+        auto & alloc = wstate.alloc_cross.alloc;        // xzl: cf above. already rserved enough mem 
 
         ggml_cgraph * gf = whisper_build_graph_cross(wctx, wstate);
 
