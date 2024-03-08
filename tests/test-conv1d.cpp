@@ -1,3 +1,7 @@
+// xzl: showcases a simple way to interact with backend APIs...
+//          esp mem allocator. 
+//  also used graph allocator ....
+
 #include "ggml.h"
 #include "ggml/ggml-alloc.h"
 #include "ggml/ggml-backend.h"
@@ -28,6 +32,11 @@ static void ggml_log_callback_default(ggml_log_level level, const char * text, v
     fflush(stderr);
 }
 
+// xzl: for model's own memory --- (not compute graph)
+//  this seems a mini version of memory mgmt. no graph allocator. 
+//          use ctx to track all tensors, cal their size, then directly 
+//          call backend to request a monolithic buf?
+// once backend buf is ready, use tensor allocator on the buf 
 struct test_model {
     struct ggml_tensor * a;
     struct ggml_tensor * b;
@@ -203,6 +212,7 @@ int main(void)
     test_model model;
     load_model(model, true);
 
+    // xzl: for compute garph's mem, use graph allocator...
     ggml_gallocr_t allocr = NULL;
 
     {
@@ -217,8 +227,10 @@ int main(void)
         fprintf(stderr, "%s: compute buffer size: %.2f MB\n", __func__, mem_size/1024.0f/1024.0f);
     }
 
-    struct ggml_cgraph * gf_res = compute_graph(model, allocr);
+    struct ggml_cgraph * gf_res = compute_graph(model, allocr); // xzl: will build a graph and eval it.. gf_res is result
 
+    // xzl: below, exract tensor data and cmp with expected res....
+    
      struct ggml_tensor * im2col_res = NULL;
     struct ggml_tensor * conv1d_res = NULL;
 

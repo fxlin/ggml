@@ -665,6 +665,7 @@ static void ggml_gallocr_alloc_graph_impl(ggml_gallocr_t galloc, struct ggml_cgr
 
 // xzl: first calc tensor alloc, then call backend to resize the bufs...
 //          that's why it's called "reserve"
+//      this is diff from alloc methods that depend on a "ctx" which has 1 backing buf?
 bool ggml_gallocr_reserve_n(ggml_gallocr_t galloc, struct ggml_cgraph * graph, const int * node_buffer_ids) {
     size_t hash_size = graph->visited_hash_table.size;
 

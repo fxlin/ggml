@@ -537,7 +537,7 @@ extern "C" {
         enum ggml_type         type;
         enum ggml_backend_type backend;
 
-        struct ggml_backend_buffer * buffer;
+        struct ggml_backend_buffer * buffer;            // xzl:points to the backing buf
 
         int64_t ne[GGML_MAX_DIMS]; // number of elements
         size_t  nb[GGML_MAX_DIMS]; // stride in bytes:
