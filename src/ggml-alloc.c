@@ -903,6 +903,8 @@ size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_id) {
 
 // utils
 
+// xzl: get a new buf from the backend. walk a tensor chain (from "t") & alloc the tensors on this buf 
+//      add the new buf to "buffers". also incr "n_buffers"
 static bool alloc_tensor_range(struct ggml_context * ctx,
         struct ggml_tensor * first, struct ggml_tensor * last,
         ggml_backend_buffer_type_t buft, size_t size,
@@ -919,7 +921,8 @@ static bool alloc_tensor_range(struct ggml_context * ctx,
         return false;
     }
 
-    struct ggml_tallocr * tallocr = ggml_tallocr_new(buffer);
+    // xzl: just got a backend buf. cr a new tensor allocator for it
+    struct ggml_tallocr * tallocr = ggml_tallocr_new(buffer);       
 
     for (struct ggml_tensor * t = first; t != last; t = ggml_get_next_tensor(ctx, t)) {
         if (t->data == NULL) {
@@ -936,7 +939,7 @@ static bool alloc_tensor_range(struct ggml_context * ctx,
         }
     }
 
-    ggml_tallocr_free(tallocr);
+    ggml_tallocr_free(tallocr); // xzl: so we wont need it? 
 
     *buffers = realloc(*buffers, sizeof(ggml_backend_buffer_t) * (*n_buffers + 1));
     (*buffers)[(*n_buffers)++] = buffer;
@@ -944,24 +947,27 @@ static bool alloc_tensor_range(struct ggml_context * ctx,
     return true;
 }
 
+// xzl: walk through ctx's tensor chain, alloc backend buffers (contig, as few as possible) on the way, 
+//          on each buf, alloc tensors (calling tensor allocator)
+//      reutrn the backend buf obj (which may rep one or more backend bufs, depending on allocation)
 ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_context * ctx, ggml_backend_buffer_type_t buft) {
     GGML_ASSERT(ggml_get_no_alloc(ctx) == true);
 
     size_t alignment = ggml_backend_buft_get_alignment(buft);
-    size_t max_size = ggml_backend_buft_get_max_size(buft);
+    size_t max_size = ggml_backend_buft_get_max_size(buft); // xzl: max size of each backend buf
 
     ggml_backend_buffer_t * buffers = NULL;
     size_t n_buffers = 0;
 
-    size_t cur_buf_size = 0;
+    size_t cur_buf_size = 0;        // xzl: how much allocated from current backend buf
     struct ggml_tensor * first = ggml_get_first_tensor(ctx);
     for (struct ggml_tensor * t = first; t != NULL; t = ggml_get_next_tensor(ctx, t)) {
-        size_t this_size = 0;
+        size_t this_size = 0;       // xzl: alloc size for this tensor?
         if (t->data == NULL && t->view_src == NULL) {
             this_size = GGML_PAD(ggml_backend_buft_get_alloc_size(buft, t), alignment);
         }
 
-        if (this_size > max_size) {
+        if (this_size > max_size) {     // xzl: single tensor > a buf's max size. no way we can do this. bail out
             fprintf(stderr, "%s: tensor %s is too large to fit in a %s buffer (tensor size: %zu, max buffer size: %zu)\n",
                     __func__, t->name,
                     ggml_backend_buft_name(buft),
@@ -973,14 +979,14 @@ ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_conte
             return NULL;
         }
 
-        if ((cur_buf_size + this_size) > max_size) {
-            // allocate tensors in the current buffer
+        if ((cur_buf_size + this_size) > max_size) {    // xzl: reached size limit of the current buf.. 
+            // allocate tensors in the current buffer  
             if (!alloc_tensor_range(ctx, first, t, buft, cur_buf_size, &buffers, &n_buffers)) {
                 return NULL;
             }
             first = t;
             cur_buf_size = this_size;
-        } else {
+        } else {        // xzl: enough space in currnt buf, keep walking the tensor chain
             cur_buf_size += this_size;
         }
     }
@@ -1003,6 +1009,7 @@ ggml_backend_buffer_t ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_conte
     if (n_buffers == 1) {
         buffer = buffers[0];
     } else {
+        // xzl: called backend to rep multiple buf objs as one?? 
         buffer = ggml_backend_multi_buffer_alloc_buffer(buffers, n_buffers);
     }
     free(buffers);

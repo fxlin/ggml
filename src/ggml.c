@@ -1982,7 +1982,7 @@ struct ggml_context {
 
     int    n_objects;
 
-    struct ggml_object * objects_begin;
+    struct ggml_object * objects_begin;     // xzl: 1st obj header in mem_buffer?
     struct ggml_object * objects_end;
 
     struct ggml_scratch scratch;            // xzl: why need this
@@ -17913,6 +17913,7 @@ int ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
     return compute_status;
 }
 
+// xzl: alloc the work buffer (for eval) from ctx, and start to eval...?
 void ggml_graph_compute_with_ctx(struct ggml_context * ctx, struct ggml_cgraph * cgraph, int n_threads) {
     struct ggml_cplan cplan = ggml_graph_plan(cgraph, n_threads);
 
@@ -18156,6 +18157,7 @@ void ggml_graph_export(const struct ggml_cgraph * cgraph, const char * fname) {
 }
 
 // xzl: why two contexts, one for "data", oine for "eval"... (model and intermediate buf??)
+//          does this alloc buf for context?? -- seems yes?
 struct ggml_cgraph * ggml_graph_import(const char * fname, struct ggml_context ** ctx_data, struct ggml_context ** ctx_eval) {
     assert(*ctx_data == NULL);
     assert(*ctx_eval == NULL);
