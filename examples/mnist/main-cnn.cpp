@@ -89,8 +89,8 @@ int mnist_eval(
     ggml_build_forward_expand(gf, probs);
     ggml_graph_compute_with_ctx(ctx0, gf, n_threads);
 
-    //ggml_graph_print(&gf);
-    ggml_graph_dump_dot(gf, NULL, "mnist-cnn.dot");
+    ggml_graph_print(gf);
+    //ggml_graph_dump_dot(gf, NULL, "mnist-cnn.dot");
 
     if (fname_cgraph) {
         // export the compute graph for later use

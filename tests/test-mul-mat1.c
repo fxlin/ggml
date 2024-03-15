@@ -1,4 +1,5 @@
 // xzl: tested idffernet methods (algos) for matmul? FP format etc. 
+// use: neon, accelerate.  seem to compare tehse two for Apple silicon
 // argv1 is method id (1,2...4)
 // noithign to do with ggml APIs?
 

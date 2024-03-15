@@ -147,7 +147,7 @@ void ggml_print_backtrace(void) {
 }
 #endif
 
-/*#define GGML_PERF         xzl: as cmakelist options */
+// #define GGML_PERF         /*xzl: as cmakelist options */
 #define GGML_DEBUG 0
 #define GGML_GELU_FP16
 #define GGML_GELU_QUICK_FP16
@@ -2296,6 +2296,9 @@ int ggml_n_dims(const struct ggml_tensor * tensor) {
 static inline bool ggml_can_mul_mat(const struct ggml_tensor * t0, const struct ggml_tensor * t1) {
     static_assert(GGML_MAX_DIMS == 4, "GGML_MAX_DIMS is not 4 - update this function");
 
+    // xzl: the 0th dim (i.e. the 'row' dim) must be the same... 
+    //      suggest that t1's mem layout is actually col major. 
+    //      for efficeint matmul, this seems a must 
     return (t0->ne[0]           == t1->ne[0])  &&
            (t1->ne[2]%t0->ne[2] == 0)          && // verify t0 is broadcastable
            (t1->ne[3]%t0->ne[3] == 0);
@@ -2749,6 +2752,7 @@ static struct ggml_tensor * ggml_new_tensor_impl(
     // xzl: tensor struct is right after the obj header....
     struct ggml_tensor * const result = (struct ggml_tensor *)((char *)ctx->mem_buffer + obj_new->offs);
 
+    // xzl: dangerous...
     *result = (struct ggml_tensor) {
         /*.type         =*/ type,
         /*.backend      =*/ GGML_BACKEND_TYPE_CPU,
@@ -4322,7 +4326,7 @@ struct ggml_tensor * ggml_mul_mat(
         struct ggml_tensor  * a,
         struct ggml_tensor  * b) {
     GGML_ASSERT(ggml_can_mul_mat(a, b));
-    GGML_ASSERT(!ggml_is_transposed(a));
+    GGML_ASSERT(!ggml_is_transposed(a));    // xzl: but b can be transposed?
 
     bool is_node = false;
 
@@ -4581,6 +4585,7 @@ static struct ggml_tensor * ggml_cpy_impl(
     return result;
 }
 
+// xzl: note this only construct graph...copy a to b
 struct ggml_tensor * ggml_cpy(
         struct ggml_context * ctx,
         struct ggml_tensor * a,
@@ -4919,7 +4924,7 @@ struct ggml_tensor * ggml_view_4d(
 }
 
 // ggml_permute
-
+// xzl: just change tnesor info, no actual data move?? 
 struct ggml_tensor * ggml_permute(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
@@ -11289,7 +11294,7 @@ static void ggml_compute_forward_set(
 }
 
 // ggml_compute_forward_cpy
-
+// xzl: does actual copy....
 static void ggml_compute_forward_cpy(
         const struct ggml_compute_params * params,
         struct ggml_tensor * dst) {
@@ -17177,6 +17182,7 @@ static void set_numa_thread_affinity(int thread_n) { UNUSED(thread_n);  }
 static void clear_numa_thread_affinity(void) {}
 #endif
 
+// xzl: the order must be kept, b/c initializer ... 
 struct ggml_compute_state_shared {
     const struct ggml_cgraph * cgraph;
     const struct ggml_cplan  * cplan;
@@ -17193,6 +17199,10 @@ struct ggml_compute_state_shared {
 
     ggml_abort_callback abort_callback; // abort ggml_graph_compute when true
     void * abort_callback_data;
+
+    // xzl add
+    int64_t perf_node_start_wait_cycles;
+    int64_t perf_node_start_wait_time_us;
 };
 
 struct ggml_compute_state {
@@ -17484,16 +17494,20 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
     int node_n     = -1;        // xzl: idx into graph->nodes
     int task_phase = GGML_TASK_TYPE_FINALIZE;
 
+    //int64_t xzl_us = ggml_perf_time_us(); 
+
     while (true) {
         if (cplan->abort_callback && cplan->abort_callback(cplan->abort_callback_data)) {
             state->shared->node_n += 1;
             return (thread_ret_t) GGML_EXIT_ABORTED;
         }
 
+        // xzl: last worker reaching this barrier ... 
+        int n_active_priv = -1;
         if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) { // xzl: this thread is 1st worker ....
             // all other threads are finished and spinning
             // do finalize and init here so we don't have synchronize again   
-            //      xzl: meaning finalize the prev node, and init the next node...??
+            //      xzl: run the FINALIZE stage (always single worker)
             struct ggml_compute_params params = {
                 /*.type  =*/ GGML_TASK_TYPE_FINALIZE, // xzl: speicfy to run the op's final pass
                 /*.ith   =*/ 0,         // xzl: specify this is thread 0
@@ -17502,17 +17516,19 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
                 /*.wdata =*/ cplan->work_data,
             };
 
-            if (node_n != -1) {
+            if (node_n != -1) {   // xzl: -1: befoer node 0
                 /* FINALIZE */
                 struct ggml_tensor * node = cgraph->nodes[node_n];
-                if (GGML_OP_HAS_FINALIZE[node->op]) { // xzl: the op has a "final" pass...
+                // xzl:  exec FINAL stage.... (only 1 worker)
+                if (GGML_OP_HAS_FINALIZE[node->op]) { 
                     params.nth = ggml_get_n_tasks(node, n_threads);
                     ggml_compute_forward(&params, node); 
                 }
-                ggml_graph_compute_perf_stats_node(node, state->shared); //xzl: the node is done
+                ggml_graph_compute_perf_stats_node(node, state->shared); //xzl: conclude the node 
             }
 
-            // distribute new work or execute it direct if 1T       xzl:1T-total 1 task
+            // distribute new work or execute it direct if 1T       xzl:1T means total 1 task needed
+            // xzl: start a new node
             while (++node_n < cgraph->n_nodes) {
                 GGML_PRINT_DEBUG_5("%s: %d/%d\n", __func__, node_n, cgraph->n_nodes);
                 struct ggml_tensor * node = cgraph->nodes[node_n];
@@ -17566,7 +17582,7 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
         // check if we should stop
         if (node_n >= cgraph->n_nodes) break;
 
-        // xzl: below, parallelize op over >1 threads. move through the init->compute->finalize FSM...
+        // xzl: below, parallelize op over >1 threads. move through the init->compute->...
 
         /* INIT & COMPUTE */
         struct ggml_tensor * node = cgraph->nodes[node_n];
@@ -17580,18 +17596,26 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             /*.wdata =*/ cplan->work_data,
         };
 
+        // xzl: all workers exec INIT stsage...
         if (state->ith < n_tasks) {
             if (GGML_OP_HAS_INIT[node->op]) {
                 ggml_compute_forward(&params, node);
             }
         }
 
-        if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) {
+        if ((n_active_priv = atomic_fetch_sub(&state->shared->n_active, 1)) == 1) { // xzl: last worker leaving INIT stage...
             task_phase = GGML_TASK_TYPE_COMPUTE;
             atomic_store(&state->shared->n_active,  n_threads);
             atomic_store(&state->shared->node_task, task_phase);
+
+            node->perf_wait_cycles += (ggml_perf_cycles() - state->shared->perf_node_start_wait_cycles); 
+            node->perf_wait_time_us += (ggml_perf_time_us() - state->shared->perf_node_start_wait_time_us);
         }
         else {
+            if (n_active_priv == n_tasks) { // 1st worker leaving INIT stage...
+                state->shared->perf_node_start_wait_cycles  = ggml_perf_cycles();
+                state->shared->perf_node_start_wait_time_us = ggml_perf_time_us();
+            }
             // TODO: this sched_yield can have significant impact on the performance - either positive or negative
             //       depending on the workload and the operating system.
             //       since it is not clear what is the best approach, it should potentially become user-configurable
@@ -17602,20 +17626,31 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             ggml_graph_compute_thread_sync_task(&task_phase, state, do_yield);
         }
 
+        // xzl: all workers exec COMPUTE stage....
         if (state->ith < n_tasks) {
             params.type = GGML_TASK_TYPE_COMPUTE;
             ggml_compute_forward(&params, node);
         }
 
-        if (atomic_fetch_sub(&state->shared->n_active, 1) == 1) {
+        // xzl: last worker leaving COMPUTE stage...
+        if ((n_active_priv = atomic_fetch_sub(&state->shared->n_active, 1)) == 1) {
             task_phase = GGML_TASK_TYPE_FINALIZE;
-            atomic_store(&state->shared->n_active,  n_threads);
+            atomic_store(&state->shared->n_active,  n_threads);     // xzl: now set n threads again.. back to the loop start
             atomic_store(&state->shared->node_task, task_phase);
+
+             node->perf_wait_cycles += (ggml_perf_cycles() - state->shared->perf_node_start_wait_cycles); 
+             node->perf_wait_time_us += (ggml_perf_time_us() - state->shared->perf_node_start_wait_time_us);
         }
         else {
+            if (n_active_priv == n_tasks) { // 1st worker leaving COMPUTE stage...
+                 state->shared->perf_node_start_wait_cycles  = ggml_perf_cycles();
+                 state->shared->perf_node_start_wait_time_us = ggml_perf_time_us();
+            }
             ggml_graph_compute_thread_sync_task(&task_phase, state, false);
         }
     }
+
+    //printf("xzl: %ld us elapsed\n", (ggml_perf_time_us() - xzl_us) / 1); 
 
     return GGML_EXIT_SUCCESS;
 }
@@ -17850,6 +17885,8 @@ int ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cplan * cplan) {
         /*.node_task               =*/ GGML_TASK_TYPE_FINALIZE,
         /*.abort_callback          =*/ NULL,
         /*.abort_callback_data     =*/ NULL,
+        .perf_node_start_wait_cycles = 0,
+        .perf_node_start_wait_time_us = 0,
     };
     struct ggml_compute_state * workers = alloca(sizeof(struct ggml_compute_state)*n_threads);
 
@@ -18415,6 +18452,7 @@ struct ggml_cgraph * ggml_graph_import(const char * fname, struct ggml_context *
     return result;
 }
 
+// xzl: will print node exec timing as well
 void ggml_graph_print(const struct ggml_cgraph * cgraph) {
     int64_t perf_total_per_op_us[GGML_OP_COUNT] = {0};
 
@@ -18426,14 +18464,18 @@ void ggml_graph_print(const struct ggml_cgraph * cgraph) {
 
         perf_total_per_op_us[node->op] += MAX(1, node->perf_time_us);
 
-        GGML_PRINT(" - %3d: [ %5" PRId64 ", %5" PRId64 ", %5" PRId64 "] %16s %s (%3d) cpu = %7.3f / %7.3f ms, wall = %7.3f / %7.3f ms\n",
+        //GGML_PRINT(" - %3d: [ %5" PRId64 ", %5" PRId64 ", %5" PRId64 "] %16s %s (%3d) cpu = %7.3f / %7.3f ms, wall = %7.3f / %7.3f ms\n",
+        GGML_PRINT(" - %3d: [ %5" PRId64 ", %5" PRId64 ", %5" PRId64 "] %16s %s (%3d) wall = %7.3f / %7.3f ms, wait = %7.3f / %7.3f ms\n",
                 i,
                 node->ne[0], node->ne[1], node->ne[2],
                 ggml_op_name(node->op), (node->flags & GGML_TENSOR_FLAG_PARAM) ? "x" : node->grad ? "g" : " ", node->perf_runs,
-                (double) node->perf_cycles  / (double) ggml_cycles_per_ms(),
-                (double) node->perf_cycles  / (double) ggml_cycles_per_ms() / (double) node->perf_runs,
+                //(double) node->perf_cycles  / (double) ggml_cycles_per_ms(),
+                //(double) node->perf_cycles  / (double) ggml_cycles_per_ms() / (double) node->perf_runs,
                 (double) node->perf_time_us / 1000.0,
-                (double) node->perf_time_us / 1000.0 / node->perf_runs);
+                (double) node->perf_time_us / 1000.0 / node->perf_runs,
+                // xzl add 
+                 (double) node->perf_wait_time_us / 1000.0,           
+                 (double) node->perf_wait_time_us / 1000.0 / node->perf_runs);
     }
 
     GGML_PRINT("n_leafs = %d\n", cgraph->n_leafs);
@@ -18447,6 +18489,7 @@ void ggml_graph_print(const struct ggml_cgraph * cgraph) {
                 ggml_get_name(node));
     }
 
+    // xzl: per node type stat...
     for (int i = 0; i < GGML_OP_COUNT; i++) {
         if (perf_total_per_op_us[i] == 0) {
             continue;

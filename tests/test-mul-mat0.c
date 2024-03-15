@@ -1,3 +1,5 @@
+//xzl: gen 2--4 dims of matrices, do mul
+
 #define _CRT_SECURE_NO_DEPRECATE // Disables ridiculous "unsafe" warnigns on Windows
 #include "ggml/ggml.h"
 
@@ -85,6 +87,7 @@ void set_element(struct ggml_tensor * t, int idx, float value) {
     ((float *)t->data)[idx] = value;
 }
 
+// xzl: do fwd, then bwd, verify gradient?
 bool check_gradient(
         const char * op_name,
         struct ggml_context * ctx0,
@@ -235,10 +238,11 @@ int main(int argc, const char ** argv) {
         .no_alloc   = false,
     };
 
-    int64_t ne[4];
+    //int64_t ne[4] = {384, 1500, 1, 1 };  // xzl whisper tiny
+    int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
 
     // original loop: 500
-    int niter = 500;
+    int niter = 1;
     const char *env = getenv("GGML_NLOOP");
     if (env != NULL) {
         niter = atoi(env);
@@ -247,23 +251,31 @@ int main(int argc, const char ** argv) {
         niter = atoi(argv[1]);
     }
 
-    int n_threads = 1;
+    int n_thrs[] = { 1,2,4,6 }; // xzl
+    int n_threads; // = 4; // xzl 1;
+    niter = sizeof(n_thrs) / sizeof(int);
 
     for (int iter = 0; iter < niter; ++iter) {
-        printf("test-mul-mat0: iter:%d/%d\n", iter, niter);
+        n_threads = n_thrs[iter];
+
+        printf("test-mul-mat0: iter:%d/%d #threads %d\n", iter, niter, n_threads);
+
         struct ggml_context * ctx0 = ggml_init(params);
 
-        get_random_dims(ne, 4);
-
+        //get_random_dims(ne, 4);     // xzl: 4 dim matmul...
+        
         struct ggml_tensor * x[MAX_NARGS];
 
         // mul_mat
         {
             const int nargs = 1;
 
-            for (int ndims = 2; ndims <= 4; ++ndims) {
+            //for (int ndims = 2; ndims <= 4; ++ndims) {      // xzl: test from 2dim to 4dim tensors...
+            for (int ndims = 3; ndims <= 3; ++ndims) {      // xzl: test from 2dim to 4dim tensors...
                 x[0] = get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f);
-                ne[1] = rand()%4 + 1;
+                //ne[1] = rand()%4 + 1;       // xzl: dim0 must match. dim1 can be diff. then dim2/3 must match...
+                ne[1] = ne[0];   // xzl
+
                 x[1] = get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f);
 
                 ggml_set_param(ctx0, x[0]);
@@ -282,26 +294,28 @@ int main(int argc, const char ** argv) {
                 assert(m->ne[3] == x[0]->ne[3]);
 
                 if (ndims <= 2) {
-                    check_gradient("mul_mat", ctx0, x, f, ndims, nargs, 1e-3f, 1e-3f, INFINITY);
+                    check_gradient("mul_mat", ctx0, x, f, ndims, nargs, 1e-3f, 1e-3f, INFINITY);    
                 } else {
                     struct ggml_cgraph * gf = ggml_new_graph(ctx0);
                     ggml_build_forward_expand(gf, m);
                     ggml_graph_compute_with_ctx(ctx0, gf, n_threads);
+                    ggml_graph_print(gf); 
                 }
 
-                check_mat_mul(m, x[1], x[0]);
+                // check_mat_mul(m, x[1], x[0]);  // xzl
             }
         }
 
         // mul_mat (transposed)
+        if (0) // xzl
         {
             const int nargs = 1;
 
             for (int ndims = 2; ndims <= 4; ++ndims) {
                 x[0] = get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f);
-                ne[1] = ne[0];
+                ne[1] = ne[0];          // xzl: now dim0 and dim1 shall match
                 ne[0] = rand()%4 + 1;
-                x[1] = ggml_cont(ctx0, ggml_transpose(ctx0, get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f)));
+                x[1] = ggml_cont(ctx0, ggml_transpose(ctx0, get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f))); // xzl: transpose and make last dim cont...
 
                 ggml_set_param(ctx0, x[0]);
 

@@ -127,7 +127,7 @@ static void whisper_log_callback_default(ggml_log_level level, const char * text
 #define WHISPER_LOG_INFO(...)  whisper_log_internal(GGML_LOG_LEVEL_INFO , __VA_ARGS__)
 
 // define this to enable verbose trace logging - useful for debugging purposes
-//#define WHISPER_DEBUG
+#define WHISPER_DEBUG           // xzl
 
 #if defined(WHISPER_DEBUG)
 #define WHISPER_LOG_DEBUG(...) whisper_log_internal(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
@@ -405,6 +405,7 @@ struct whisper_segment {
     bool speaker_turn_next;
 };
 
+// xzl: represnts a text prompt .. of n tokens?s
 struct whisper_batch {
     int32_t n_tokens;
 
@@ -518,11 +519,11 @@ static bool whisper_allocr_graph_init(struct whisper_allocr & allocr, ggml_backe
 struct whisper_hparams {
     int32_t n_vocab       = 51864;
     int32_t n_audio_ctx   = 1500;
-    int32_t n_audio_state = 384;
+    int32_t n_audio_state = 384;        // xzl: feature size
     int32_t n_audio_head  = 6;
     int32_t n_audio_layer = 4;
-    int32_t n_text_ctx    = 448;
-    int32_t n_text_state  = 384;
+    int32_t n_text_ctx    = 448;        // xzl: what for? max text length?
+    int32_t n_text_state  = 384;        // xzl: feature size
     int32_t n_text_head   = 6;
     int32_t n_text_layer  = 4;
     int32_t n_mels        = 80;
@@ -755,6 +756,7 @@ struct whisper_state {
     int64_t t_prompt_us = 0;
     int64_t t_mel_us = 0;
 
+    // xzl: cf whisper_decode_internal
     int32_t n_sample = 0; // number of tokens sampled
     int32_t n_encode = 0; // number of encoder calls
     int32_t n_decode = 0; // number of decoder calls with n_tokens == 1  (text-generation)
@@ -1678,6 +1680,7 @@ static struct ggml_cgraph * whisper_build_graph_conv(
     return gf;
 }
 
+// xzl: build graph for attn, etc. 
 static struct ggml_cgraph * whisper_build_graph_encoder(
         whisper_context & wctx,
           whisper_state & wstate) {
@@ -1719,7 +1722,8 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
 
     const size_t e_pe_stride = model.e_pe->ne[0]*ggml_element_size(model.e_pe);
     const size_t e_pe_offset = model.e_pe->ne[0]*ggml_element_size(model.e_pe)*n_ctx*iter;
-
+ 
+    // xzl: add positional embedding...
     struct ggml_tensor * e_pe = ggml_view_2d(ctx0, model.e_pe, model.e_pe->ne[0], n_ctx, e_pe_stride, e_pe_offset);
     cur = ggml_add(ctx0, e_pe, ggml_cont(ctx0, ggml_transpose(ctx0, cur)));
 
@@ -1730,10 +1734,11 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
 
     struct ggml_tensor * inpL = cur;
 
+    // xzl: n encoding layers... 
     for (int il = 0; il < n_layer; ++il) {
         const auto & layer = model.layers_encoder[il];
 
-        // norm
+        // norm         xzl: before attn?
         {
             cur = ggml_norm(ctx0, inpL, hparams.eps);
 
@@ -1745,11 +1750,12 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
 
         // self-attention
         {
+            // xzl: below, directly call mulmat to project....
             struct ggml_tensor * Qcur = ggml_mul_mat(ctx0,
                     layer.attn_q_w,
-                    cur);
+                    cur);       
 
-            Qcur = ggml_add(ctx0, Qcur, layer.attn_q_b);
+            Qcur = ggml_add(ctx0, Qcur, layer.attn_q_b);        // xzl: bias...
 
             //Qcur = ggml_scale(ctx0, Qcur, pow(float(n_state)/n_head, -0.25));
 
@@ -1794,6 +1800,7 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
 
             struct ggml_tensor * KQV = ggml_flash_attn(ctx0, Q, K, V, false);
 #else
+            // xzl: split into heads... then cpy to a new view (actual dup contents.. why?)
             struct ggml_tensor * Q =
                 ggml_permute(ctx0,
                         ggml_cpy(ctx0,
@@ -1808,7 +1815,7 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
                             ggml_new_tensor_3d(ctx0, wctx.itype, n_state/n_head, n_head, n_ctx)),
                         0, 2, 1, 3);
 
-            // K * Q
+            // K * Q            ... xzl: 3D tensors??
             struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
 
             struct ggml_tensor * KQ_scaled = ggml_scale(ctx0, KQ, KQscale);
@@ -1865,7 +1872,7 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
                     ggml_cpy(ctx0, cur, ggml_new_tensor_2d(ctx0, wstate.itype, n_state, n_ctx)),
                     layer.mlp_0_w, layer.mlp_0_b, layer.mlp_1_w, layer.mlp_1_b);
 #else
-            // fully connected
+            // fully connected          xzl: as mulmat
             cur = ggml_mul_mat(ctx0,
                     layer.mlp_0_w,
                     cur);
@@ -1926,9 +1933,10 @@ static struct ggml_cgraph * whisper_build_graph_cross(
     const auto & model   = wctx.model;
     const auto & hparams = model.hparams;
 
+    // xzl: seq length
     const int n_ctx   = wstate.exp_n_audio_ctx > 0 ? wstate.exp_n_audio_ctx : hparams.n_audio_ctx;
-    const int n_state = hparams.n_audio_state;
-    const int n_head  = hparams.n_audio_head;
+    const int n_state = hparams.n_audio_state;  // xzl: seems feature dim
+    const int n_head  = hparams.n_audio_head;       
 
     struct ggml_init_params params = {
         /*.mem_size   =*/ wstate.alloc_cross.meta.size(),
@@ -1940,10 +1948,12 @@ static struct ggml_cgraph * whisper_build_graph_cross(
 
     ggml_cgraph * gf = ggml_new_graph(ctx0);
 
-    struct ggml_tensor * cur = ggml_view_tensor(ctx0, wstate.embd_enc);
+    // xzl: input tokens (output of encoder)
+    struct ggml_tensor * cur = ggml_view_tensor(ctx0, wstate.embd_enc);     
 
     const float  Kscale = pow(float(n_state) / n_head, -0.25);
 
+    // xzl: each decoder layer has cross attn...
     for (int il = 0; il < model.hparams.n_text_layer; ++il) {
         auto & layer = model.layers_decoder[il];
 
@@ -1961,6 +1971,7 @@ static struct ggml_cgraph * whisper_build_graph_cross(
                     Vcross,
                     layer.cross_attn_v_b);
 
+        // xzl: why reshape/transpose. and create copies KV cross??? to be understood....
         Vcross = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcross, n_state, n_ctx));
 
         struct ggml_tensor * k = ggml_view_1d(ctx0, wstate.kv_cross.k,
@@ -1992,7 +2003,7 @@ static struct ggml_cgraph * whisper_build_graph_cross(
 //   - n_threads:  number of threads to use
 //   - mel_offset: offset in the mel spectrogram (i.e. audio offset)
 //
-// xzl: build graphs on the fly.... conv, enc, dec...
+// xzl: build graphs on the fly.... conv, enc, dec... and eval
 static bool whisper_encode_internal(
         whisper_context & wctx,
           whisper_state & wstate,
@@ -2047,9 +2058,9 @@ static bool whisper_encode_internal(
 
         // xzl: actually eval the conv graph...
         if (!whisper_encode_external(wstate)) {
-            if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
+            if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {                
                 return false;
-            }
+            } // else { ggml_graph_print(gf);  }  // xzl: dump the graph with timing... very fast. xzl add
         } else {
 #if defined(WHISPER_USE_COREML)
             whisper_coreml_encode(wstate.ctx_coreml, mel->ne[0], mel->ne[1], (float *) mel->data, (float *) wstate.embd_enc->data);
@@ -2076,7 +2087,7 @@ static bool whisper_encode_internal(
 
         if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
-        }
+        } // else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
     }
 
     // cross
@@ -2092,7 +2103,7 @@ static bool whisper_encode_internal(
 
         if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
-        }
+        } // else { ggml_graph_print(gf); }  // xzl: dump the graph with timing...  xzl add
     }
 
     wstate.t_encode_us += ggml_time_us() - t_start_us;
@@ -2438,7 +2449,10 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 //   - tokens:     text prompt
 //   - n_tokens:   number of tokens in the prompt
 //   - n_past:     number of past tokens to prefix the prompt with
-//
+// xzl: a decoding round  run NN to get logits
+//          the above comment can be confusing. 
+//               batch.n_tokens: during init prompt encoding (i.e. not generating) == 1
+//                  during geneartion, == the batch size, i.e. one token from each decoder instance. e.g. 5 default
 static bool whisper_decode_internal(
         whisper_context & wctx,
           whisper_state & wstate,
@@ -2460,7 +2474,7 @@ static bool whisper_decode_internal(
 
     // find KV slot for the batch
     {
-        auto & kv_self = wstate.kv_self;
+        auto & kv_self = wstate.kv_self;  // xzl: self attn...
 
         if (!whisper_kv_cache_find_slot(kv_self, batch)) {
             return false;
@@ -2471,10 +2485,11 @@ static bool whisper_decode_internal(
         //printf("n_tokens = %5d, kv_self.head = %5d, kv_self.n = %5d, seq_id = %5d\n", batch.n_tokens, kv_self.head, kv_self.n, batch.seq_id[0][0]);
     }
 
-    // decoder
+    // decoder      
     {
         auto & alloc = wstate.alloc_decode.alloc;
 
+        // xzl: why build graph every time??
         ggml_cgraph * gf = whisper_build_graph_decoder(wctx, wstate, batch, false);
 
         if (!ggml_gallocr_alloc_graph(alloc, gf)) {
@@ -2496,7 +2511,7 @@ static bool whisper_decode_internal(
             }
         }
 
-        {
+        {       // xzl: apply mask...
             struct ggml_tensor * KQ_mask = ggml_graph_get_tensor(gf, "KQ_mask");
 
             auto & kv_self = wstate.kv_self;
@@ -2525,7 +2540,7 @@ static bool whisper_decode_internal(
 
         logits = gf->nodes[gf->n_nodes - 1];
 
-        if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
+        if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) { // xzl: eval the decoder graph...
             return false;
         }
     }
@@ -2547,13 +2562,13 @@ static bool whisper_decode_internal(
         //        wstate.get_buf_max_mem(3)/1e6);
     }
 
-    if (batch.n_tokens == 1) {
+    if (batch.n_tokens == 1) {          // xzl: for encoding the init token [SOT] also the last token in the last hypothesis
         wstate.t_decode_us += ggml_time_us() - t_start_us;
         wstate.n_decode++;
-    } else if (batch.n_tokens < 16) {
+    } else if (batch.n_tokens < 16) {           // xzl: during beam search, n_tokens <= multi decoder instances, e.g. 5
         wstate.t_batchd_us += ggml_time_us() - t_start_us;
         wstate.n_batchd += n_tokens;
-    } else {
+    } else {            // xzl:     n_tokens > 16?? for user-provided textual prompts? (therefore encoding >16 tokens)
         wstate.t_prompt_us += ggml_time_us() - t_start_us;
         wstate.n_prompt += n_tokens;
     }
@@ -5169,10 +5184,10 @@ int whisper_full_with_state(
 
         int best_decoder_id = 0;
 
-        for (int it = 0; it < (int) temperatures.size(); ++it) {
+        for (int it = 0; it < (int) temperatures.size(); ++it) { // xzl: try all possible temps? but can break?
             const float t_cur = temperatures[it];
 
-            int n_decoders_cur = 1;
+            int n_decoders_cur = 1;     // xzl: current #decoder instances? (like beam size)
 
             switch (params.strategy) {
                 case whisper_sampling_strategy::WHISPER_SAMPLING_GREEDY:
@@ -5220,7 +5235,7 @@ int whisper_full_with_state(
                 }
             }
 
-            // init prompt and kv cache for the current iteration
+            // init prompt and kv cache for the current iteration       xzl: iteration means the current temp?
             // TODO: do not recompute the prompt if it is the same as previous time
             {
                 prompt.clear();
@@ -5234,9 +5249,10 @@ int whisper_full_with_state(
                 }
 
                 // init new transcription with sot, language (opt) and task tokens
+                // xzl: do this once for each temp
                 prompt.insert(prompt.end(), prompt_init.begin(), prompt_init.end());
 
-                // print the prompt
+                // print the prompt         (xzl: init prompt...)
                 WHISPER_LOG_DEBUG("\n\n");
                 for (int i = 0; i < (int) prompt.size(); i++) {
                     WHISPER_LOG_DEBUG("%s: prompt[%d] = %s\n", __func__, i, ctx->vocab.id_to_token.at(prompt[i]).c_str());
@@ -5245,7 +5261,7 @@ int whisper_full_with_state(
 
                 whisper_kv_cache_clear(state->kv_self);
 
-                whisper_batch_prep_legacy(state->batch, prompt.data(), prompt.size(), 0, 0);
+                whisper_batch_prep_legacy(state->batch, prompt.data(), prompt.size(), 0, 0); // xzl: put init prompt to a "batch" (ex size can be 1?)
 
                 if (!whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, params.abort_callback, params.abort_callback_user_data)) {
                     WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);
@@ -5287,7 +5303,7 @@ int whisper_full_with_state(
                 {
                     std::atomic<int> j_cur(0);
 
-                    auto process = [&]() {
+                    auto process = [&]() {      // xzl: to be exec in thread workers, cf below
                         while (true) {
                             const int j = j_cur.fetch_add(1);
 
@@ -5295,7 +5311,7 @@ int whisper_full_with_state(
                                 break;
                             }
 
-                            auto & decoder = state->decoders[j];
+                            auto & decoder = state->decoders[j];    // each thread exec a decoder instance.... for what
 
                             if (decoder.completed || decoder.failed) {
                                 continue;
@@ -5314,6 +5330,7 @@ int whisper_full_with_state(
                                     } break;
                                 case whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH:
                                     {
+                                        // xzl: spawn more???
                                         const auto tokens_new = whisper_sample_token_topk(*ctx, decoder, params.beam_search.beam_size);
 
                                         for (const auto & token : tokens_new) {
@@ -5354,7 +5371,7 @@ int whisper_full_with_state(
                     }
                 }
 
-                // for beam-search, choose the top candidates and update the KV caches
+                // for beam-search, choose the top candidates and update the KV caches      (xzl: KV cache is for existing prompts...?)
                 if (params.strategy == whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH) {
                     std::sort(
                             beam_candidates.begin(),
@@ -5517,13 +5534,13 @@ int whisper_full_with_state(
 
                 // obtain logits for the next token
                 {
-                    auto & batch = state->batch;
+                    auto & batch = state->batch;                // xzl: batch is shared across all decoders...
 
                     batch.n_tokens = 0;
 
                     const int n_past = prompt.size() + i;
 
-                    for (int j = 0; j < n_decoders_cur; ++j) {
+                    for (int j = 0; j < n_decoders_cur; ++j) {          // xzl: for each decoder instance... 
                         auto & decoder = state->decoders[j];
 
                         if (decoder.failed || decoder.completed) {
@@ -5534,18 +5551,19 @@ int whisper_full_with_state(
 
                         decoder.i_batch = batch.n_tokens;
 
-                        batch.token   [batch.n_tokens]    = decoder.sequence.tokens.back().id;
+                        // xzl: deposit ths most recent token from each decoder..  to the "batch"
+                        batch.token   [batch.n_tokens]    = decoder.sequence.tokens.back().id;      
                         batch.pos     [batch.n_tokens]    = n_past;
                         batch.n_seq_id[batch.n_tokens]    = 1;
                         batch.seq_id  [batch.n_tokens][0] = j;
                         batch.logits  [batch.n_tokens]    = 1;
-                        batch.n_tokens++;
+                        batch.n_tokens++;           // xzl: n_tokens across all decoders
                     }
 
                     assert(batch.n_tokens > 0);
 
                     if (!whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, params.abort_callback, params.abort_callback_user_data)) {
-                        WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);
+                        WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);          // xzl: run NN to process the whole batch
                         return -8;
                     }
 
@@ -5569,7 +5587,7 @@ int whisper_full_with_state(
                                     continue;
                                 }
 
-                                whisper_process_logits(*ctx, *state, decoder, params, t_cur);
+                                whisper_process_logits(*ctx, *state, decoder, params, t_cur); // xzl: some dark tricks inside? worth parallelization
                             }
                         };
 

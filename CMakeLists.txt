@@ -23,6 +23,9 @@ else()
     endif()
 endif()
 
+        set(BUILD_SHARED_LIBS_DEFAULT OFF)
+# xzl
+
 # options
 
 option(BUILD_SHARED_LIBS            "ggml: build shared libs" ${BUILD_SHARED_LIBS_DEFAULT})
@@ -39,7 +42,7 @@ option(GGML_BUILD_EXAMPLES          "ggml: build examples" ${GGML_STANDALONE})
 
 option(GGML_TEST_COVERAGE           "ggml: enable test coverage" OFF)
 
-option(GGML_PERF                    "ggml: enable perf timings"          OFF)
+option(GGML_PERF                    "ggml: enable perf timings"          OFF)        # xzl  -- turned on 
 option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)
 option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)
 option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
