@@ -184,6 +184,7 @@ ggml_backend_buffer_type_t ggml_backend_get_default_buffer_type(ggml_backend_t b
     return backend->iface.get_default_buffer_type(backend);
 }
 
+// xzl: direct alloc a backend buf?
 ggml_backend_buffer_t ggml_backend_alloc_buffer(ggml_backend_t backend, size_t size) {
     return ggml_backend_buft_alloc_buffer(ggml_backend_get_default_buffer_type(backend), size);
 }
@@ -266,6 +267,8 @@ void ggml_backend_graph_plan_compute(ggml_backend_t backend, ggml_backend_graph_
     backend->iface.graph_plan_compute(backend, plan);
 }
 
+// xzl: what's diff vs. ggml_graph_compute_with_ctx? this one seems to be used with rserved backend bufs
+//          i.e. graph allocator. does not need to alloc again (hence no "ctx" needed)
 bool ggml_backend_graph_compute(ggml_backend_t backend, struct ggml_cgraph * cgraph) {
     return backend->iface.graph_compute(backend, cgraph);
 }
@@ -1645,7 +1648,8 @@ void ggml_backend_view_init(ggml_backend_buffer_t buffer, struct ggml_tensor * t
     ggml_backend_buffer_init_tensor(buffer, tensor);
 }
 
-// xzl: only call backend tensor init callback (if any), not doing any actual mem alloc???
+// xzl: assign tensor's data and backend buf pointers
+//      also call bckend's tensor init (if any)
 void ggml_backend_tensor_alloc(ggml_backend_buffer_t buffer, struct ggml_tensor * tensor, void * addr) {
     GGML_ASSERT(tensor->buffer == NULL);
     GGML_ASSERT(tensor->data == NULL);

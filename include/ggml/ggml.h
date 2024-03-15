@@ -523,7 +523,7 @@ extern "C" {
         size_t offs;            // xzl: seems to point the tensor head for this obj, offset as in the context's buf
         size_t size;
 
-        struct ggml_object * next;
+        struct ggml_object * next;              // xzl : objs  linked
 
         enum ggml_object_type type;
 
@@ -533,11 +533,12 @@ extern "C" {
     static const size_t GGML_OBJECT_SIZE = sizeof(struct ggml_object);
 
     // n-dimensional tensor
+    // xzl: add new members only to the end, b/c of the initiaizer.... (serach for "/*.extra ")
     struct ggml_tensor {
         enum ggml_type         type;
         enum ggml_backend_type backend;
 
-        struct ggml_backend_buffer * buffer;
+        struct ggml_backend_buffer * buffer;            // xzl:points to the backing buf
 
         int64_t ne[GGML_MAX_DIMS]; // number of elements
         size_t  nb[GGML_MAX_DIMS]; // stride in bytes:
@@ -562,7 +563,7 @@ extern "C" {
         int     perf_runs;
         int64_t perf_cycles;
         int64_t perf_time_us;
-
+        
         struct ggml_tensor * view_src;
         size_t               view_offs;
 
@@ -572,7 +573,11 @@ extern "C" {
 
         void * extra; // extra things e.g. for ggml-cuda.cu
 
-        char padding[8];
+        char padding[8]; // xzl: needed? 
+
+        // xzl add
+        int64_t perf_wait_cycles;
+        int64_t perf_wait_time_us;
     };
 
     static const size_t GGML_TENSOR_SIZE = sizeof(struct ggml_tensor);

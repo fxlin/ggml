@@ -44,7 +44,7 @@ int mnist_eval(
     // param export/import test
     GGML_ASSERT(ggml_graph_get_tensor(gfi, "fc1_bias")->op_params[0] == int(0xdeadbeef));
 
-    // allocate work context
+    // allocate work context            xzl: meaning for "eval"
     // needed during ggml_graph_compute() to allocate a work tensor
     static size_t buf_size = 128ull*1024*1024; // TODO
     static void * buf = malloc(buf_size);

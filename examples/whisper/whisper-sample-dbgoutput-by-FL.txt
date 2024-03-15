@@ -1,0 +1,340 @@
+whisper_init_from_file_with_params_no_state: loading model from 'models/ggml-base.en.bin'
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51864
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 512
+whisper_model_load: n_audio_head  = 8
+whisper_model_load: n_audio_layer = 6
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 512
+whisper_model_load: n_text_head   = 8
+whisper_model_load: n_text_layer  = 6
+whisper_model_load: n_mels        = 80
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 2 (base)
+whisper_model_load: adding 1607 extra tokens
+whisper_model_load: n_langs       = 99
+whisper_model_load:      CPU total size =   147.37 MB
+whisper_model_load: model size    =  147.37 MB
+whisper_init_state: kv self size  =   16.52 MB
+whisper_init_state: kv cross size =   18.43 MB
+ggml_gallocr_needs_realloc: graph has different number of nodes
+ggml_gallocr_alloc_graph: reallocating buffers automatically
+ggml_gallocr_reserve_n: reallocating CPU buffer from size 0.00 MiB to 14.01 MiB
+whisper_init_state: compute buffer (conv)   =   16.46 MB
+ggml_gallocr_needs_realloc: graph has different number of nodes
+ggml_gallocr_alloc_graph: reallocating buffers automatically
+ggml_gallocr_reserve_n: reallocating CPU buffer from size 0.00 MiB to 124.33 MiB
+whisper_init_state: compute buffer (encode) =  132.14 MB
+ggml_gallocr_needs_realloc: graph has different number of nodes
+ggml_gallocr_alloc_graph: reallocating buffers automatically
+ggml_gallocr_reserve_n: reallocating CPU buffer from size 0.00 MiB to 2.93 MiB
+whisper_init_state: compute buffer (cross)  =    4.84 MB
+ggml_gallocr_needs_realloc: graph has different number of nodes
+ggml_gallocr_alloc_graph: reallocating buffers automatically
+ggml_gallocr_reserve_n: reallocating CPU buffer from size 0.00 MiB to 90.38 MiB
+whisper_init_state: compute buffer (decode) =   96.54 MB
+
+system_info: n_threads = 6 / 12 | AVX = 1 | AVX2 = 1 | AVX512 = 0 | FMA = 1 | NEON = 0 | ARM_FMA = 0 | METAL = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 0 | SSE3 = 1 | SSSE3 = 0 | VSX = 0 | CUDA = 0 | COREML = 0 | OPENVINO = 0 |
+
+main: processing 'samples\jfk.wav' (176000 samples, 11.0 sec), 6 threads, 1 processors, 5 beams + best of 5, lang = en, task = transcribe, timestamps = 1 ...
+
+
+whisper_full_with_state: strategy = 1, decoding with 5 decoders, temperature = 0.00
+
+
+whisper_full_with_state: prompt[0] = [_SOT_]
+
+
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =    [_BEG_], plog = -0.17812, sum_logprobs = -0.17812
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =    [_BEG_], plog = -0.17812, sum_logprobs = -0.17812
+whisper_full_with_state: beam search: decoder 2: from decoder 0: token =    [_BEG_], plog = -0.17812, sum_logprobs = -0.17812
+whisper_full_with_state: beam search: decoder 3: from decoder 0: token =    [_BEG_], plog = -0.17812, sum_logprobs = -0.17812
+whisper_full_with_state: beam search: decoder 4: from decoder 1: token =    [_BEG_], plog = -0.17812, sum_logprobs = -0.17812
+whisper_full_with_state: id =   0, decoder = 0, token =  50363, p =  0.837, ts =    [_BEG_],  0.837, result_len =    0 '[_BEG_]'
+whisper_full_with_state: id =   0, decoder = 1, token =  50363, p =  0.837, ts =    [_BEG_],  0.837, result_len =    0 '[_BEG_]'
+whisper_full_with_state: id =   0, decoder = 2, token =  50363, p =  0.837, ts =    [_BEG_],  0.837, result_len =    0 '[_BEG_]'
+whisper_full_with_state: id =   0, decoder = 3, token =  50363, p =  0.837, ts =    [_BEG_],  0.837, result_len =    0 '[_BEG_]'
+whisper_full_with_state: id =   0, decoder = 4, token =  50363, p =  0.837, ts =    [_BEG_],  0.837, result_len =    0 '[_BEG_]'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        And, plog = -0.34147, sum_logprobs = -0.51959
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =        and, plog = -1.84190, sum_logprobs = -2.02003
+whisper_full_with_state: beam search: decoder 2: from decoder 0: token =        And, plog = -0.34147, sum_logprobs = -0.51959
+whisper_full_with_state: beam search: decoder 3: from decoder 0: token =        and, plog = -1.84190, sum_logprobs = -2.02003
+whisper_full_with_state: beam search: decoder 4: from decoder 0: token =        And, plog = -0.34147, sum_logprobs = -0.51959
+whisper_full_with_state: id =   1, decoder = 0, token =    843, p =  0.711, ts =        [?],  0.000, result_len =    0 ' And'
+whisper_full_with_state: id =   1, decoder = 1, token =    290, p =  0.159, ts =        [?],  0.000, result_len =    0 ' and'
+whisper_full_with_state: id =   1, decoder = 2, token =    843, p =  0.711, ts =        [?],  0.000, result_len =    0 ' And'
+whisper_full_with_state: id =   1, decoder = 3, token =    290, p =  0.159, ts =        [?],  0.000, result_len =    0 ' and'
+whisper_full_with_state: id =   1, decoder = 4, token =    843, p =  0.711, ts =        [?],  0.000, result_len =    0 ' And'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =         so, plog = -0.01501, sum_logprobs = -0.53460
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =         so, plog = -0.03582, sum_logprobs = -2.05585
+whisper_full_with_state: beam search: decoder 2: from decoder 0: token =         so, plog = -0.01501, sum_logprobs = -0.53460
+whisper_full_with_state: beam search: decoder 3: from decoder 1: token =         so, plog = -0.03582, sum_logprobs = -2.05585
+whisper_full_with_state: beam search: decoder 4: from decoder 0: token =         so, plog = -0.01501, sum_logprobs = -0.53460
+whisper_full_with_state: id =   2, decoder = 0, token =    523, p =  0.985, ts =        [?],  0.019, result_len =    0 ' so'
+whisper_full_with_state: id =   2, decoder = 1, token =    523, p =  0.965, ts =        [?],  0.023, result_len =    0 ' so'
+whisper_full_with_state: id =   2, decoder = 2, token =    523, p =  0.985, ts =        [?],  0.019, result_len =    0 ' so'
+whisper_full_with_state: id =   2, decoder = 3, token =    523, p =  0.965, ts =        [?],  0.023, result_len =    0 ' so'
+whisper_full_with_state: id =   2, decoder = 4, token =    523, p =  0.985, ts =        [?],  0.019, result_len =    0 ' so'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =         my, plog = -0.36002, sum_logprobs = -0.89462
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =          ,, plog = -1.39983, sum_logprobs = -1.93443
+whisper_full_with_state: beam search: decoder 2: from decoder 1: token =         my, plog = -0.12860, sum_logprobs = -2.18445
+whisper_full_with_state: beam search: decoder 3: from decoder 1: token =         am, plog = -3.05470, sum_logprobs = -5.11055
+whisper_full_with_state: beam search: decoder 4: from decoder 0: token =         my, plog = -0.36002, sum_logprobs = -0.89462
+whisper_full_with_state: id =   3, decoder = 0, token =    616, p =  0.698, ts =        [?],  0.020, result_len =    0 ' my'
+whisper_full_with_state: id =   3, decoder = 1, token =     11, p =  0.247, ts =        [?],  0.020, result_len =    0 ','
+whisper_full_with_state: id =   3, decoder = 2, token =    616, p =  0.879, ts =        [?],  0.021, result_len =    0 ' my'
+whisper_full_with_state: id =   3, decoder = 3, token =    716, p =  0.047, ts =        [?],  0.021, result_len =    0 ' am'
+whisper_full_with_state: id =   3, decoder = 4, token =    616, p =  0.698, ts =        [?],  0.020, result_len =    0 ' my'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =     fellow, plog = -0.00544, sum_logprobs = -0.90006
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =         my, plog = -0.01520, sum_logprobs = -1.94963
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =     fellow, plog = -0.00612, sum_logprobs = -2.19057
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =          I, plog = -0.07815, sum_logprobs = -5.18870
+whisper_full_with_state: beam search: decoder 4: from decoder 0: token =     fellow, plog = -0.00544, sum_logprobs = -0.90006
+whisper_full_with_state: id =   4, decoder = 0, token =   5891, p =  0.995, ts =        [?],  0.030, result_len =    0 ' fellow'
+whisper_full_with_state: id =   4, decoder = 1, token =    616, p =  0.985, ts =        [?],  0.039, result_len =    0 ' my'
+whisper_full_with_state: id =   4, decoder = 2, token =   5891, p =  0.994, ts =        [?],  0.040, result_len =    0 ' fellow'
+whisper_full_with_state: id =   4, decoder = 3, token =    314, p =  0.925, ts =        [?],  0.021, result_len =    0 ' I'
+whisper_full_with_state: id =   4, decoder = 4, token =   5891, p =  0.995, ts =        [?],  0.030, result_len =    0 ' fellow'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =  Americans, plog = -0.10133, sum_logprobs = -1.00138
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =     fellow, plog = -0.00307, sum_logprobs = -1.95269
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =  Americans, plog = -0.28302, sum_logprobs = -2.47359
+whisper_full_with_state: beam search: decoder 3: from decoder 2: token =    America, plog = -2.28587, sum_logprobs = -4.47644
+whisper_full_with_state: beam search: decoder 4: from decoder 3: token =     fellow, plog = -0.06169, sum_logprobs = -5.25039
+whisper_full_with_state: id =   5, decoder = 0, token =   3399, p =  0.904, ts =        [?],  0.067, result_len =    0 ' Americans'
+whisper_full_with_state: id =   5, decoder = 1, token =   5891, p =  0.997, ts =        [?],  0.022, result_len =    0 ' fellow'
+whisper_full_with_state: id =   5, decoder = 2, token =   3399, p =  0.754, ts =        [?],  0.068, result_len =    0 ' Americans'
+whisper_full_with_state: id =   5, decoder = 3, token =   2253, p =  0.102, ts =        [?],  0.068, result_len =    0 ' America'
+whisper_full_with_state: id =   5, decoder = 4, token =   5891, p =  0.940, ts =        [?],  0.033, result_len =    0 ' fellow'
+whisper_full_with_state: beam search: decoder 0: from decoder 1: token =  Americans, plog = -0.07498, sum_logprobs = -2.02768
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =          ,, plog = -1.24816, sum_logprobs = -2.24954
+whisper_full_with_state: beam search: decoder 2: from decoder 0: token =      asked, plog = -1.41794, sum_logprobs = -2.41932
+whisper_full_with_state: beam search: decoder 3: from decoder 2: token =        ask, plog = -1.05360, sum_logprobs = -3.52719
+whisper_full_with_state: beam search: decoder 4: from decoder 2: token =      asked, plog = -1.45485, sum_logprobs = -3.92844
+whisper_full_with_state: id =   6, decoder = 0, token =   3399, p =  0.928, ts =        [?],  0.050, result_len =    0 ' Americans'
+whisper_full_with_state: id =   6, decoder = 1, token =     11, p =  0.287, ts =        [?],  0.037, result_len =    0 ','
+whisper_full_with_state: id =   6, decoder = 2, token =   1965, p =  0.242, ts =        [?],  0.037, result_len =    0 ' asked'
+whisper_full_with_state: id =   6, decoder = 3, token =   1265, p =  0.349, ts =        [?],  0.047, result_len =    0 ' ask'
+whisper_full_with_state: id =   6, decoder = 4, token =   1965, p =  0.233, ts =        [?],  0.047, result_len =    0 ' asked'
+whisper_full_with_state: beam search: decoder 0: from decoder 1: token =        ask, plog = -0.22298, sum_logprobs = -2.47252
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =          ,, plog = -0.66682, sum_logprobs = -2.69450
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =        not, plog = -0.45168, sum_logprobs = -2.87100
+whisper_full_with_state: beam search: decoder 3: from decoder 2: token =        NOT, plog = -1.27727, sum_logprobs = -3.69659
+whisper_full_with_state: beam search: decoder 4: from decoder 3: token =        not, plog = -0.30382, sum_logprobs = -3.83101
+whisper_full_with_state: id =   7, decoder = 0, token =   1265, p =  0.800, ts =        [?],  0.039, result_len =    0 ' ask'
+whisper_full_with_state: id =   7, decoder = 1, token =     11, p =  0.513, ts =        [?],  0.034, result_len =    0 ','
+whisper_full_with_state: id =   7, decoder = 2, token =    407, p =  0.637, ts =        [?],  0.039, result_len =    0 ' not'
+whisper_full_with_state: id =   7, decoder = 3, token =   5626, p =  0.279, ts =        [?],  0.039, result_len =    0 ' NOT'
+whisper_full_with_state: id =   7, decoder = 4, token =    407, p =  0.738, ts =        [?],  0.043, result_len =    0 ' not'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        not, plog = -0.24063, sum_logprobs = -2.71315
+whisper_full_with_state: beam search: decoder 1: from decoder 2: token =       what, plog = -0.08976, sum_logprobs = -2.96077
+whisper_full_with_state: beam search: decoder 2: from decoder 1: token =        ask, plog = -0.26641, sum_logprobs = -2.96091
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =       what, plog = -0.23668, sum_logprobs = -3.93327
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =       what, plog = -0.11416, sum_logprobs = -3.94517
+whisper_full_with_state: id =   8, decoder = 0, token =    407, p =  0.786, ts =        [?],  0.031, result_len =    0 ' not'
+whisper_full_with_state: id =   8, decoder = 1, token =    644, p =  0.914, ts =        [?],  0.041, result_len =    0 ' what'
+whisper_full_with_state: id =   8, decoder = 2, token =   1265, p =  0.766, ts =        [?],  0.041, result_len =    0 ' ask'
+whisper_full_with_state: id =   8, decoder = 3, token =    644, p =  0.789, ts =        [?],  0.054, result_len =    0 ' what'
+whisper_full_with_state: id =   8, decoder = 4, token =    644, p =  0.892, ts =        [?],  0.043, result_len =    0 ' what'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =       what, plog = -0.07107, sum_logprobs = -2.78422
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =       your, plog = -0.01602, sum_logprobs = -2.97679
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =        not, plog = -0.32615, sum_logprobs = -3.28706
+whisper_full_with_state: beam search: decoder 3: from decoder 4: token =       your, plog = -0.01743, sum_logprobs = -3.96260
+whisper_full_with_state: beam search: decoder 4: from decoder 3: token =       your, plog = -0.04157, sum_logprobs = -3.97484
+whisper_full_with_state: id =   9, decoder = 0, token =    644, p =  0.931, ts =        [?],  0.051, result_len =    0 ' what'
+whisper_full_with_state: id =   9, decoder = 1, token =    534, p =  0.984, ts =        [?],  0.067, result_len =    0 ' your'
+whisper_full_with_state: id =   9, decoder = 2, token =    407, p =  0.722, ts =        [?],  0.026, result_len =    0 ' not'
+whisper_full_with_state: id =   9, decoder = 3, token =    534, p =  0.983, ts =        [?],  0.094, result_len =    0 ' your'
+whisper_full_with_state: id =   9, decoder = 4, token =    534, p =  0.959, ts =        [?],  0.050, result_len =    0 ' your'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =       your, plog = -0.01254, sum_logprobs = -2.79676
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =    country, plog = -0.00475, sum_logprobs = -2.98154
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =       what, plog = -0.08364, sum_logprobs = -3.37069
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =    country, plog = -0.00660, sum_logprobs = -3.96920
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =    country, plog = -0.01929, sum_logprobs = -3.99414
+whisper_full_with_state: id =  10, decoder = 0, token =    534, p =  0.988, ts =        [?],  0.078, result_len =    0 ' your'
+whisper_full_with_state: id =  10, decoder = 1, token =   1499, p =  0.995, ts =        [?],  0.072, result_len =    0 ' country'
+whisper_full_with_state: id =  10, decoder = 2, token =    644, p =  0.920, ts =        [?],  0.050, result_len =    0 ' what'
+whisper_full_with_state: id =  10, decoder = 3, token =   1499, p =  0.993, ts =  [_TT_288],  0.113, result_len =    0 ' country'
+whisper_full_with_state: id =  10, decoder = 4, token =   1499, p =  0.981, ts =        [?],  0.052, result_len =    0 ' country'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =    country, plog = -0.00442, sum_logprobs = -2.80118
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        can, plog = -0.02586, sum_logprobs = -3.00740
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =       your, plog = -0.01178, sum_logprobs = -3.38247
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =        can, plog = -0.01265, sum_logprobs = -3.98184
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =        can, plog = -0.02099, sum_logprobs = -4.01513
+whisper_full_with_state: id =  11, decoder = 0, token =   1499, p =  0.996, ts =        [?],  0.054, result_len =    0 ' country'
+whisper_full_with_state: id =  11, decoder = 1, token =    460, p =  0.974, ts =        [?],  0.053, result_len =    0 ' can'
+whisper_full_with_state: id =  11, decoder = 2, token =    534, p =  0.988, ts =        [?],  0.085, result_len =    0 ' your'
+whisper_full_with_state: id =  11, decoder = 3, token =    460, p =  0.987, ts =        [?],  0.055, result_len =    0 ' can'
+whisper_full_with_state: id =  11, decoder = 4, token =    460, p =  0.979, ts =        [?],  0.059, result_len =    0 ' can'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        can, plog = -0.02373, sum_logprobs = -2.82491
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =         do, plog = -0.01288, sum_logprobs = -3.02029
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =    country, plog = -0.00397, sum_logprobs = -3.38645
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =         do, plog = -0.01101, sum_logprobs = -3.99286
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =         do, plog = -0.00758, sum_logprobs = -4.02272
+whisper_full_with_state: id =  12, decoder = 0, token =    460, p =  0.977, ts =        [?],  0.050, result_len =    0 ' can'
+whisper_full_with_state: id =  12, decoder = 1, token =    466, p =  0.987, ts =  [_TT_332],  0.118, result_len =    0 ' do'
+whisper_full_with_state: id =  12, decoder = 2, token =   1499, p =  0.996, ts =        [?],  0.044, result_len =    0 ' country'
+whisper_full_with_state: id =  12, decoder = 3, token =    466, p =  0.989, ts =  [_TT_332],  0.148, result_len =    0 ' do'
+whisper_full_with_state: id =  12, decoder = 4, token =    466, p =  0.992, ts =  [_TT_332],  0.131, result_len =    0 ' do'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =         do, plog = -0.01028, sum_logprobs = -2.83519
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        for, plog = -0.04044, sum_logprobs = -3.06073
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =        can, plog = -0.02341, sum_logprobs = -3.40985
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =        for, plog = -0.02451, sum_logprobs = -4.01737
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =        for, plog = -0.02829, sum_logprobs = -4.05101
+whisper_full_with_state: id =  13, decoder = 0, token =    466, p =  0.990, ts =  [_TT_332],  0.115, result_len =    0 ' do'
+whisper_full_with_state: id =  13, decoder = 1, token =    329, p =  0.960, ts =        [?],  0.067, result_len =    0 ' for'
+whisper_full_with_state: id =  13, decoder = 2, token =    460, p =  0.977, ts =        [?],  0.054, result_len =    0 ' can'
+whisper_full_with_state: id =  13, decoder = 3, token =    329, p =  0.976, ts =        [?],  0.080, result_len =    0 ' for'
+whisper_full_with_state: id =  13, decoder = 4, token =    329, p =  0.972, ts =        [?],  0.071, result_len =    0 ' for'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        for, plog = -0.04488, sum_logprobs = -2.88007
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        you, plog = -0.02092, sum_logprobs = -3.08165
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =         do, plog = -0.00841, sum_logprobs = -3.41826
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =        you, plog = -0.00885, sum_logprobs = -4.02622
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =        you, plog = -0.03938, sum_logprobs = -4.09039
+whisper_full_with_state: id =  14, decoder = 0, token =    329, p =  0.956, ts =        [?],  0.073, result_len =    0 ' for'
+whisper_full_with_state: id =  14, decoder = 1, token =    345, p =  0.979, ts =  [_TT_352],  0.143, result_len =    0 ' you'
+whisper_full_with_state: id =  14, decoder = 2, token =    466, p =  0.992, ts =  [_TT_332],  0.116, result_len =    0 ' do'
+whisper_full_with_state: id =  14, decoder = 3, token =    345, p =  0.991, ts =  [_TT_354],  0.147, result_len =    0 ' you'
+whisper_full_with_state: id =  14, decoder = 4, token =    345, p =  0.961, ts =  [_TT_352],  0.176, result_len =    0 ' you'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        you, plog = -0.01570, sum_logprobs = -2.89577
+whisper_full_with_state: beam search: decoder 1: from decoder 2: token =        for, plog = -0.04407, sum_logprobs = -3.46233
+whisper_full_with_state: beam search: decoder 2: from decoder 3: token =        ask, plog = -0.70511, sum_logprobs = -4.73133
+whisper_full_with_state: beam search: decoder 3: from decoder 1: token =          ., plog = -1.79342, sum_logprobs = -4.87507
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =          ,, plog = -0.99381, sum_logprobs = -5.08420
+whisper_full_with_state: id =  15, decoder = 0, token =    345, p =  0.984, ts =  [_TT_350],  0.156, result_len =    0 ' you'
+whisper_full_with_state: id =  15, decoder = 1, token =    329, p =  0.957, ts =        [?],  0.077, result_len =    0 ' for'
+whisper_full_with_state: id =  15, decoder = 2, token =   1265, p =  0.494, ts =        [?],  0.060, result_len =    0 ' ask'
+whisper_full_with_state: id =  15, decoder = 3, token =     13, p =  0.166, ts =        [?],  0.066, result_len =    0 '.'
+whisper_full_with_state: id =  15, decoder = 4, token =     11, p =  0.370, ts =        [?],  0.076, result_len =    0 ','
+whisper_full_with_state: beam search: decoder 0: from decoder 1: token =        you, plog = -0.01403, sum_logprobs = -3.47636
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =          ,, plog = -0.70726, sum_logprobs = -3.60304
+whisper_full_with_state: beam search: decoder 2: from decoder 0: token =          ., plog = -1.27709, sum_logprobs = -4.17286
+whisper_full_with_state: beam search: decoder 3: from decoder 2: token =       what, plog = -0.04485, sum_logprobs = -4.77618
+whisper_full_with_state: beam search: decoder 4: from decoder 0: token =        ask, plog = -3.71554, sum_logprobs = -6.61131
+whisper_full_with_state: id =  16, decoder = 0, token =    345, p =  0.986, ts =  [_TT_350],  0.181, result_len =    0 ' you'
+whisper_full_with_state: id =  16, decoder = 1, token =     11, p =  0.493, ts =        [?],  0.053, result_len =    0 ','
+whisper_full_with_state: id =  16, decoder = 2, token =     13, p =  0.279, ts =        [?],  0.053, result_len =    0 '.'
+whisper_full_with_state: id =  16, decoder = 3, token =    644, p =  0.956, ts =        [?],  0.058, result_len =    0 ' what'
+whisper_full_with_state: id =  16, decoder = 4, token =   1265, p =  0.024, ts =        [?],  0.053, result_len =    0 ' ask'
+whisper_full_with_state: beam search: decoder 0: from decoder 1: token =        ask, plog = -0.43568, sum_logprobs = -4.03872
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =          ,, plog = -0.84682, sum_logprobs = -4.32318
+whisper_full_with_state: beam search: decoder 2: from decoder 0: token =          ., plog = -1.29939, sum_logprobs = -4.77574
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =        you, plog = -0.35004, sum_logprobs = -5.12622
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =       what, plog = -0.04826, sum_logprobs = -6.65957
+whisper_full_with_state: id =  17, decoder = 0, token =   1265, p =  0.647, ts =        [?],  0.058, result_len =    0 ' ask'
+whisper_full_with_state: id =  17, decoder = 1, token =     11, p =  0.429, ts =        [?],  0.058, result_len =    0 ','
+whisper_full_with_state: id =  17, decoder = 2, token =     13, p =  0.273, ts =        [?],  0.058, result_len =    0 '.'
+whisper_full_with_state: id =  17, decoder = 3, token =    345, p =  0.705, ts =  [_TT_439],  0.275, result_len =    0 ' you'
+whisper_full_with_state: id =  17, decoder = 4, token =    644, p =  0.953, ts =        [?],  0.055, result_len =    0 ' what'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =       what, plog = -0.01263, sum_logprobs = -4.05135
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        ask, plog = -0.52930, sum_logprobs = -4.85249
+whisper_full_with_state: beam search: decoder 2: from decoder 3: token =        can, plog = -0.64718, sum_logprobs = -5.77340
+whisper_full_with_state: beam search: decoder 3: from decoder 4: token =        you, plog = -0.03081, sum_logprobs = -6.69039
+whisper_full_with_state: beam search: decoder 4: from decoder 3: token =  [_TT_452], plog = -2.34669, sum_logprobs = -7.47291
+whisper_full_with_state: id =  18, decoder = 0, token =    644, p =  0.987, ts =        [?],  0.073, result_len =    0 ' what'
+whisper_full_with_state: id =  18, decoder = 1, token =   1265, p =  0.589, ts =        [?],  0.058, result_len =    0 ' ask'
+whisper_full_with_state: id =  18, decoder = 2, token =    460, p =  0.524, ts =  [_TT_452],  0.203, result_len =    0 ' can'
+whisper_full_with_state: id =  18, decoder = 3, token =    345, p =  0.970, ts =  [_TT_440],  0.142, result_len =    0 ' you'
+whisper_full_with_state: id =  18, decoder = 4, token =  50815, p =  0.096, ts =        [?],  0.096, result_len =   19 '[_TT_452]'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        you, plog = -0.01957, sum_logprobs = -4.07091
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =       what, plog = -0.01189, sum_logprobs = -4.86437
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =         do, plog = -0.09012, sum_logprobs = -5.86353
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =        can, plog = -0.05008, sum_logprobs = -6.74046
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =  [_TT_452], plog = -0.02030, sum_logprobs = -7.49322
+whisper_full_with_state: id =  19, decoder = 0, token =    345, p =  0.981, ts =  [_TT_440],  0.126, result_len =    0 ' you'
+whisper_full_with_state: id =  19, decoder = 1, token =    644, p =  0.988, ts =        [?],  0.074, result_len =    0 ' what'
+whisper_full_with_state: id =  19, decoder = 2, token =    466, p =  0.914, ts =  [_TT_468],  0.148, result_len =    0 ' do'
+whisper_full_with_state: id =  19, decoder = 3, token =    460, p =  0.951, ts =        [?],  0.093, result_len =    0 ' can'
+whisper_full_with_state: id =  19, decoder = 4, token =  50815, p =  0.980, ts =  [_TT_452],  0.980, result_len =   20 '[_TT_452]'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        can, plog = -0.03207, sum_logprobs = -4.10298
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        you, plog = -0.01809, sum_logprobs = -4.88246
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =        for, plog = -0.26122, sum_logprobs = -6.12474
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =         do, plog = -0.06629, sum_logprobs = -6.80675
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =        can, plog = -0.00126, sum_logprobs = -7.49448
+whisper_full_with_state: id =  20, decoder = 0, token =    460, p =  0.968, ts =        [?],  0.068, result_len =    0 ' can'
+whisper_full_with_state: id =  20, decoder = 1, token =    345, p =  0.982, ts =  [_TT_440],  0.122, result_len =    0 ' you'
+whisper_full_with_state: id =  20, decoder = 2, token =    329, p =  0.770, ts =  [_TT_472],  0.131, result_len =    0 ' for'
+whisper_full_with_state: id =  20, decoder = 3, token =    466, p =  0.936, ts =  [_TT_466],  0.192, result_len =    0 ' do'
+whisper_full_with_state: id =  20, decoder = 4, token =    460, p =  0.999, ts =        [?],  0.000, result_len =   20 ' can'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =         do, plog = -0.09399, sum_logprobs = -4.19698
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        can, plog = -0.04818, sum_logprobs = -4.93064
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =       your, plog = -0.08459, sum_logprobs = -6.20933
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =        for, plog = -0.17300, sum_logprobs = -6.97975
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =         do, plog = -0.00051, sum_logprobs = -7.49499
+whisper_full_with_state: id =  21, decoder = 0, token =    466, p =  0.910, ts =  [_TT_466],  0.205, result_len =    0 ' do'
+whisper_full_with_state: id =  21, decoder = 1, token =    460, p =  0.953, ts =        [?],  0.062, result_len =    0 ' can'
+whisper_full_with_state: id =  21, decoder = 2, token =    534, p =  0.919, ts =  [_TT_488],  0.228, result_len =    0 ' your'
+whisper_full_with_state: id =  21, decoder = 3, token =    329, p =  0.841, ts =  [_TT_472],  0.144, result_len =    0 ' for'
+whisper_full_with_state: id =  21, decoder = 4, token =    466, p =  0.999, ts =        [?],  0.025, result_len =   20 ' do'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =        for, plog = -0.09884, sum_logprobs = -4.29582
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =         do, plog = -0.15944, sum_logprobs = -5.09008
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =    country, plog = -0.00930, sum_logprobs = -6.21863
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =       your, plog = -0.03024, sum_logprobs = -7.00999
+whisper_full_with_state: beam search: decoder 4: from decoder 4: token =        for, plog = -0.00135, sum_logprobs = -7.49634
+whisper_full_with_state: id =  22, decoder = 0, token =    329, p =  0.906, ts =  [_TT_472],  0.151, result_len =    0 ' for'
+whisper_full_with_state: id =  22, decoder = 1, token =    466, p =  0.853, ts =  [_TT_466],  0.214, result_len =    0 ' do'
+whisper_full_with_state: id =  22, decoder = 2, token =   1499, p =  0.991, ts =  [_TT_497],  0.129, result_len =    0 ' country'
+whisper_full_with_state: id =  22, decoder = 3, token =    534, p =  0.970, ts =  [_TT_488],  0.165, result_len =    0 ' your'
+whisper_full_with_state: id =  22, decoder = 4, token =    329, p =  0.999, ts =        [?],  0.024, result_len =   20 ' for'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =       your, plog = -0.01936, sum_logprobs = -4.31518
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =        for, plog = -0.04690, sum_logprobs = -5.13698
+whisper_full_with_state: beam search: decoder 2: from decoder 3: token =    country, plog = -0.00508, sum_logprobs = -7.01507
+whisper_full_with_state: beam search: decoder 3: from decoder 4: token =       your, plog = -0.00139, sum_logprobs = -7.49774
+whisper_full_with_state: beam search: decoder 4: from decoder 2: token =  [_TT_520], plog = -3.82706, sum_logprobs = -10.04569
+whisper_full_with_state: id =  23, decoder = 0, token =    534, p =  0.981, ts =  [_TT_488],  0.162, result_len =    0 ' your'
+whisper_full_with_state: id =  23, decoder = 1, token =    329, p =  0.954, ts =  [_TT_472],  0.143, result_len =    0 ' for'
+whisper_full_with_state: id =  23, decoder = 2, token =   1499, p =  0.995, ts =        [?],  0.095, result_len =    0 ' country'
+whisper_full_with_state: id =  23, decoder = 3, token =    534, p =  0.999, ts =        [?],  0.097, result_len =   20 ' your'
+whisper_full_with_state: id =  23, decoder = 4, token =  50883, p =  0.022, ts =        [?],  0.022, result_len =   24 '[_TT_520]'
+whisper_full_with_state: decoder 4 completed
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =    country, plog = -0.00457, sum_logprobs = -4.31975
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =       your, plog = -0.01317, sum_logprobs = -5.15014
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =          ., plog = -0.18299, sum_logprobs = -7.19806
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =    country, plog = -0.00128, sum_logprobs = -7.49902
+whisper_full_with_state: id =  24, decoder = 0, token =   1499, p =  0.995, ts =  [_TT_500],  0.101, result_len =    0 ' country'
+whisper_full_with_state: id =  24, decoder = 1, token =    534, p =  0.987, ts =  [_TT_488],  0.158, result_len =    0 ' your'
+whisper_full_with_state: id =  24, decoder = 2, token =     13, p =  0.833, ts =        [?],  0.037, result_len =    0 '.'
+whisper_full_with_state: id =  24, decoder = 3, token =   1499, p =  0.999, ts =        [?],  0.043, result_len =   20 ' country'
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =          ., plog = -0.13513, sum_logprobs = -4.45488
+whisper_full_with_state: beam search: decoder 1: from decoder 1: token =    country, plog = -0.00364, sum_logprobs = -5.15378
+whisper_full_with_state: beam search: decoder 2: from decoder 2: token =  [_TT_550], plog = -2.63154, sum_logprobs = -9.82961
+whisper_full_with_state: beam search: decoder 3: from decoder 3: token =  [_TT_622], plog = -2.82013, sum_logprobs = -10.31915
+whisper_full_with_state: id =  25, decoder = 0, token =     13, p =  0.874, ts =        [?],  0.044, result_len =    0 '.'
+whisper_full_with_state: id =  25, decoder = 1, token =   1499, p =  0.996, ts =  [_TT_500],  0.104, result_len =    0 ' country'
+whisper_full_with_state: id =  25, decoder = 2, token =  50913, p =  0.072, ts =        [?],  0.072, result_len =   26 '[_TT_550]'
+whisper_full_with_state: decoder 2 completed
+whisper_full_with_state: id =  25, decoder = 3, token =  50985, p =  0.060, ts =        [?],  0.060, result_len =   26 '[_TT_622]'
+whisper_full_with_state: decoder 3 completed
+whisper_full_with_state: beam search: decoder 0: from decoder 1: token =          ., plog = -0.13224, sum_logprobs = -5.28602
+whisper_full_with_state: beam search: decoder 1: from decoder 0: token =  [_TT_550], plog = -2.56600, sum_logprobs = -7.02088
+whisper_full_with_state: id =  26, decoder = 0, token =     13, p =  0.876, ts =        [?],  0.046, result_len =    0 '.'
+whisper_full_with_state: id =  26, decoder = 1, token =  50913, p =  0.077, ts =        [?],  0.077, result_len =   27 '[_TT_550]'
+whisper_full_with_state: decoder 1 completed
+whisper_full_with_state: beam search: decoder 0: from decoder 0: token =  [_TT_500], plog = -3.99969, sum_logprobs = -9.28571
+whisper_full_with_state: id =  27, decoder = 0, token =  50863, p =  0.018, ts =        [?],  0.018, result_len =   28 '[_TT_500]'
+whisper_full_with_state: decoder 0 completed
+whisper_full_with_state: decoder  0: score = -0.33163, result_len =  28, avg_logprobs = -0.33163, entropy =  2.81841
+whisper_full_with_state: decoder  1: score = -0.26003, result_len =  27, avg_logprobs = -0.26003, entropy =  2.83374
+whisper_full_with_state: decoder  2: score = -0.37806, result_len =  26, avg_logprobs = -0.37806, entropy =  2.83154
+whisper_full_with_state: decoder  3: score = -0.39689, result_len =  26, avg_logprobs = -0.39689, entropy =  2.77823
+whisper_full_with_state: decoder  4: score = -0.41857, result_len =  24, avg_logprobs = -0.41857, entropy =  2.71596
+whisper_full_with_state: best decoder = 1
+
+[00:00:00.000 --> 00:00:11.000]   And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
+seek = 1100, seek_delta = 1100
+
+
+whisper_print_timings:     load time =   227.55 ms
+whisper_print_timings:     fallbacks =   0 p /   0 h
+whisper_print_timings:      mel time =   346.57 ms
+whisper_print_timings:   sample time =  1400.75 ms /   131 runs (   10.69 ms per run)
+whisper_print_timings:   encode time = 10788.99 ms /     1 runs (10788.99 ms per run)
+whisper_print_timings:   decode time =    37.69 ms /     2 runs (   18.85 ms per run)
+whisper_print_timings:   batchd time =  1659.27 ms /   125 runs (   13.27 ms per run)
+whisper_print_timings:   prompt time =     0.00 ms /     1 runs (    0.00 ms per run)
+whisper_print_timings:    total time = 14595.01 ms
+
+D:\workspace-ggml\ggml\build\bin\Debug\whisper.exe (process 18220) exited with code 0.
+To automatically close the console when debugging stops, enable Tools->Options->Debugging->Automatically close the console when debugging stops.
+Press any key to close this window . . .

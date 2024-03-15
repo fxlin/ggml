@@ -64,9 +64,17 @@ GGML_API size_t ggml_gallocr_get_buffer_size(ggml_gallocr_t galloc, int buffer_i
 
 // Utils
 // Create a buffer and allocate all the tensors in a ggml_context
-//    xzl:"create a buffer" means what? 
+//    xzl:"create a buffer" means ... a ggml_backend_buffer obj (which wraps around 1+ actual backend bufs?)
 GGML_API struct ggml_backend_buffer * ggml_backend_alloc_ctx_tensors_from_buft(struct ggml_context * ctx, ggml_backend_buffer_type_t buft);
 GGML_API struct ggml_backend_buffer * ggml_backend_alloc_ctx_tensors(struct ggml_context * ctx, ggml_backend_t backend);
+
+
+// xzl: there seem two ways to alloca tnesors...
+// 1. simple one. use context. directly call backend method to alloc 1 buf. then alloc
+//    tensors on the buf (e.g. for weights). cf test-conv1d.cpp
+// 2. use graph alloc. does not need a contxt... all state is kept inside the graph allocator
+//      mantain multiple backend bufs inside? 
+//    used for graph eval??   also cf test-conv1d.cpp
 
 #ifdef  __cplusplus
 }

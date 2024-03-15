@@ -1,4 +1,5 @@
 // quantized matrix multiplication
+// xzl: argv1 is m,ethod id (1,2,3...6) cna be useful to test and undertsatnd matmul quant on cpu simds
 
 #include "ggml.h"
 
