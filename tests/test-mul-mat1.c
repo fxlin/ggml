@@ -258,7 +258,7 @@ int main(int argc, const char ** argv) {
         printf("%f %f\n", src0[i], src0_fp16[i]);
     }
 
-    int method = 0;
+    int method = 4;    // xzl: method0 8000ms, method4 (accelerate) 6ms
     if (argc > 1) {
         method = atoi(argv[1]);
     }
