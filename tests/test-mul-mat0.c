@@ -233,13 +233,16 @@ bool check_mat_mul(
 
 int main(int argc, const char ** argv) {
     struct ggml_init_params params = {
-        .mem_size   = 128*1024*1024,
+        // .mem_size   = 128*1024*1024,
+        .mem_size   = 512*1024*1024,
         .mem_buffer = NULL,
         .no_alloc   = false,
     };
 
     //int64_t ne[4] = {384, 1500, 1, 1 };  // xzl whisper tiny
-    int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
+    //int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
+ int64_t ne[4] = { 4096, 4096, 1, 1 };  
+
 
     // original loop: 500
     int niter = 1;
