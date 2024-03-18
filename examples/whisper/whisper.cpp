@@ -127,7 +127,7 @@ static void whisper_log_callback_default(ggml_log_level level, const char * text
 #define WHISPER_LOG_INFO(...)  whisper_log_internal(GGML_LOG_LEVEL_INFO , __VA_ARGS__)
 
 // define this to enable verbose trace logging - useful for debugging purposes
-#define WHISPER_DEBUG           // xzl
+//#define WHISPER_DEBUG           // xzl
 
 #if defined(WHISPER_DEBUG)
 #define WHISPER_LOG_DEBUG(...) whisper_log_internal(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
@@ -2087,7 +2087,7 @@ static bool whisper_encode_internal(
 
         if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
-        } // else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
+        } else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
     }
 
     // cross

@@ -1,5 +1,9 @@
 //xzl: gen 2--4 dims of matrices, do mul
 
+// mba m2 Accelerate seems to relaly shine
+// on mba m2, 1024x1500  @ 1024@1024 takes <10ms, 
+// while xps15 seems about 3-4x slower
+
 #define _CRT_SECURE_NO_DEPRECATE // Disables ridiculous "unsafe" warnigns on Windows
 #include "ggml/ggml.h"
 
@@ -240,7 +244,8 @@ int main(int argc, const char ** argv) {
     };
 
     //int64_t ne[4] = {384, 1500, 1, 1 };  // xzl whisper tiny
-    int64_t ne[4] = { 1280, 1500, 1, 1 };  // xzl whisper medium
+    int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
+    // int64_t ne[4] = { 4096, 1500, 1, 1 };  
 
     // original loop: 500
     int niter = 1;
