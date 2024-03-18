@@ -240,9 +240,7 @@ int main(int argc, const char ** argv) {
     };
 
     //int64_t ne[4] = {384, 1500, 1, 1 };  // xzl whisper tiny
-    //int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
- int64_t ne[4] = { 4096, 4096, 1, 1 };  
-
+    int64_t ne[4] = { 1280, 1500, 1, 1 };  // xzl whisper medium
 
     // original loop: 500
     int niter = 1;
@@ -301,11 +299,14 @@ int main(int argc, const char ** argv) {
                 } else {
                     struct ggml_cgraph * gf = ggml_new_graph(ctx0);
                     ggml_build_forward_expand(gf, m);
+                    const int64_t t1 = ggml_time_ms();       // xzl
                     ggml_graph_compute_with_ctx(ctx0, gf, n_threads);
-                    ggml_graph_print(gf); 
+                    const int64_t t2 = ggml_time_ms() - t1;
+                    ggml_graph_print(gf);
+                    printf("--- xzl --- graph eval %lld ms\n", t2);
                 }
 
-                // check_mat_mul(m, x[1], x[0]);  // xzl
+                 // check_mat_mul(m, x[1], x[0]);  // xzl
             }
         }
 
