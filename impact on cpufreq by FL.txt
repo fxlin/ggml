@@ -1,0 +1,50 @@
+impact on cpufreq by FL 
+
+XPS15, 6 cores
+max 4.5GHz. 
+cap max freq in Windows settings (verified by Vtune "hotspot" analysis) 
+
+change windows power plan, cf: 
+https://www.tenforums.com/tutorials/95580-add-remove-maximum-processor-frequency-windows-10-power-options.html
+
+
+3.5GHz
+
+>>> Run1
+whisper_print_timings:     load time =   167.63 ms
+whisper_print_timings:     fallbacks =   0 p /   0 h
+whisper_print_timings:      mel time =    25.95 ms
+whisper_print_timings:   sample time =   203.91 ms /   131 runs (    1.56 ms per run)
+whisper_print_timings:   encode time =  2032.11 ms /     1 runs ( 2032.11 ms per run)
+whisper_print_timings:   decode time =    13.83 ms /     2 runs (    6.91 ms per run)
+whisper_print_timings:   batchd time =   372.10 ms /   125 runs (    2.98 ms per run)
+whisper_print_timings:   prompt time =     0.00 ms /     1 runs (    0.00 ms per run)
+whisper_print_timings:    total time =  2823.51 ms
+
+>>> Run2
+whisper_print_timings:     load time =   155.69 ms
+whisper_print_timings:     fallbacks =   0 p /   0 h
+whisper_print_timings:      mel time =    24.29 ms
+whisper_print_timings:   sample time =   170.85 ms /   131 runs (    1.30 ms per run)
+whisper_print_timings:   encode time =  2171.38 ms /     1 runs ( 2171.38 ms per run)
+whisper_print_timings:   decode time =    14.83 ms /     2 runs (    7.42 ms per run)
+whisper_print_timings:   batchd time =   344.83 ms /   125 runs (    2.76 ms per run)
+whisper_print_timings:   prompt time =     0.00 ms /     1 runs (    0.00 ms per run)
+whisper_print_timings:    total time =  2890.09 ms
+
+>>> Run3
+whisper_print_timings:     load time =   169.01 ms
+whisper_print_timings:     fallbacks =   0 p /   0 h
+whisper_print_timings:      mel time =    24.16 ms
+whisper_print_timings:   sample time =   170.67 ms /   131 runs (    1.30 ms per run)
+whisper_print_timings:   encode time =  2028.29 ms /     1 runs ( 2028.29 ms per run)
+whisper_print_timings:   decode time =    15.03 ms /     2 runs (    7.52 ms per run)
+whisper_print_timings:   batchd time =   354.38 ms /   125 runs (    2.84 ms per run)
+whisper_print_timings:   prompt time =     0.00 ms /     1 runs (    0.00 ms per run)
+whisper_print_timings:    total time =  2769.61 ms
+
+
+4.5GHz
+>> 
+
+

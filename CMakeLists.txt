@@ -23,8 +23,13 @@ else()
     endif()
 endif()
 
-        set(BUILD_SHARED_LIBS_DEFAULT OFF)
-# xzl
+set(BUILD_SHARED_LIBS_DEFAULT OFF)
+
+# xzl  -- VTUNE --
+include_directories("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\include")
+add_compile_definitions(GGML_USE_VTUNE)
+# add_link_options("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\lib64\\libittnotify.lib")
+
 
 # options
 
@@ -44,7 +49,7 @@ option(GGML_TEST_COVERAGE           "ggml: enable test coverage" OFF)
 
 option(GGML_PERF                    "ggml: enable perf timings"          ON)        # xzl  -- turned on 
 option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)
-option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)
+option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)        # xzl -- toggled this
 option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
 option(GGML_HIPBLAS                 "ggml: use hipBLAS"                  OFF)
 option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)

@@ -1,5 +1,6 @@
 #include "whisper.h"
 
+
 #ifdef WHISPER_USE_COREML
 #include "coreml/whisper-encoder.h"
 #endif
@@ -14,6 +15,20 @@
 
 #ifdef WHISPER_USE_OPENVINO
 #include "openvino/whisper-openvino-encoder.h"
+#endif
+
+// xzladd
+#ifdef GGML_USE_VTUNE
+#include "ittnotify.h"
+    enum{VT_CONV=0, VT_ENCODE, VT_CROSS, VT_SAMPLE1, VT_SAMPLE2, VT_DECODE, VT_MAX};
+	__itt_domain * itt_domain = NULL;
+	// __itt_string_handle * sh_sort = NULL; // the overall task name
+    __itt_string_handle * sh_parts[VT_MAX] = {NULL}; // per part task name
+	#define vtune_task_begin(X) __itt_task_begin(itt_domain, __itt_null, __itt_null, sh_parts[X])
+	#define vtune_task_end() __itt_task_end(itt_domain)
+#else 
+	#define vtune_task_begin(X)
+	#define vtune_task_end()        
 #endif
 
 #include "ggml.h"
@@ -127,7 +142,7 @@ static void whisper_log_callback_default(ggml_log_level level, const char * text
 #define WHISPER_LOG_INFO(...)  whisper_log_internal(GGML_LOG_LEVEL_INFO , __VA_ARGS__)
 
 // define this to enable verbose trace logging - useful for debugging purposes
-//#define WHISPER_DEBUG           // xzl
+// #define WHISPER_DEBUG           // xzl
 
 #if defined(WHISPER_DEBUG)
 #define WHISPER_LOG_DEBUG(...) whisper_log_internal(GGML_LOG_LEVEL_DEBUG, __VA_ARGS__)
@@ -709,7 +724,7 @@ struct whisper_grammar_candidate {
     whisper_partial_utf8   partial_utf8;
 };
 
-struct whisper_sequence {
+struct whisper_sequence {       // xzl: a seq of decoded tokens?
     std::vector<whisper_token_data> tokens;
 
     // the accumulated transcription in the current iteration (used to truncate the tokens array)
@@ -742,7 +757,7 @@ struct whisper_decoder {
     std::vector<float> logits;
     std::vector<float> logprobs;
 
-    // work container used to avoid memory allocations
+    // work container used to avoid memory allocations      xzl: to get topk logits?
     std::vector<whisper_pair<double, whisper_vocab::id>> logits_id;
 
     mutable std::mt19937 rng; // used for sampling at t > 0.0
@@ -1077,7 +1092,7 @@ static bool whisper_model_load(struct whisper_model_loader * loader, whisper_con
 
     const int64_t t_start_us = ggml_time_us();
 
-    wctx.t_start_us = t_start_us;
+    wctx.t_start_us = t_start_us;       // xzl: credible measurement (more than vtune...
 
     auto & model = wctx.model;
     auto & vocab = wctx.vocab;
@@ -2013,7 +2028,18 @@ static bool whisper_encode_internal(
                    void * abort_callback_data) {
     const int64_t t_start_us = ggml_time_us();
 
+    // xzladd
+// #ifdef GGML_USE_VTUNE
+//     itt_domain = __itt_domain_create("my domain");
+// 	__itt_thread_set_name("my main");
+//     sh_parts[0] = __itt_string_handle_create("conv"); assert(sh_parts[0]);
+//     sh_parts[1] = __itt_string_handle_create("encode"); assert(sh_parts[1]);
+//     sh_parts[2] = __itt_string_handle_create("cross"); assert(sh_parts[2]);
+//     sh_parts[3] = __itt_string_handle_create("decode"); assert(sh_parts[3]);
+// #endif
+
     // conv
+    vtune_task_begin(VT_CONV);
     {
         auto & alloc = wstate.alloc_conv.alloc;
 
@@ -2069,8 +2095,10 @@ static bool whisper_encode_internal(
 #endif
         }
     }
+    vtune_task_end();
 
     // encoder
+    vtune_task_begin(VT_ENCODE); 
     if (!whisper_encode_external(wstate)) {
         auto & alloc = wstate.alloc_encode.alloc;       // xzl: this galloc already reserved enough mem from measurement run....
 
@@ -2089,8 +2117,10 @@ static bool whisper_encode_internal(
             return false;
         } else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
     }
+    vtune_task_end(); 
 
     // cross
+    vtune_task_begin(VT_CROSS); 
     {
         auto & alloc = wstate.alloc_cross.alloc;        // xzl: cf above. already rserved enough mem 
 
@@ -2105,7 +2135,7 @@ static bool whisper_encode_internal(
             return false;
         } // else { ggml_graph_print(gf); }  // xzl: dump the graph with timing...  xzl add
     }
-
+    vtune_task_end();     
     wstate.t_encode_us += ggml_time_us() - t_start_us;
     wstate.n_encode++;
 
@@ -4835,6 +4865,8 @@ static whisper_token_data whisper_sample_token(
     return result;
 }
 
+// xzl: for one decoder instance, sample top k tokens (probs/logits/etc already computed
+//      not exact topk, but sampled with probs?
 static std::vector<whisper_token_data> whisper_sample_token_topk(
             whisper_context & ctx,
             whisper_decoder & decoder,
@@ -4845,17 +4877,18 @@ static std::vector<whisper_token_data> whisper_sample_token_topk(
     const auto & logits   = decoder.logits;
     const auto & logprobs = decoder.logprobs;
 
-    const int n_logits = vocab.n_vocab;
+    const int n_logits = vocab.n_vocab;     //xzl: 51684 by default...
 
-    auto & logits_id = decoder.logits_id;
+    // xzl: get topk out of decoder.logits_id by probs... why needed? 
+    auto & logits_id = decoder.logits_id;       
 
     logits_id.resize(n_logits);
     for (int i = 0; i < n_logits; ++i) {
         logits_id[i].first = logits[i];
-        logits_id[i].second = i;
+        logits_id[i].second = i;        //xzl: to keep track of vocab id in sorting...
     }
 
-    {
+    {       // xzl: top k out of ~50K items ... via partial sort
         using pair_type = std::remove_reference<decltype(logits_id)>::type::value_type;
         std::partial_sort(
                 logits_id.begin(),
@@ -4870,6 +4903,7 @@ static std::vector<whisper_token_data> whisper_sample_token_topk(
 
     whisper_token tid = vocab.token_beg;
 
+    // xzl: below: sum all probs...?
     float pt    = 0.0;
     float ptsum = 0.0;
 
@@ -4893,10 +4927,12 @@ static std::vector<whisper_token_data> whisper_sample_token_topk(
         ptsum = sum_ts;
     }
 
-    std::discrete_distribution<> dist(probs.begin(), probs.end());
+    // xzl: weighted sampling, weights from "probs". just sample top k
+    //      cf: https://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+    std::discrete_distribution<> dist(probs.begin(), probs.end()); 
 
     for (int i = 0; i < k; ++i) {
-        const auto id = dist(decoder.rng);
+        const auto id = dist(decoder.rng);  //xzl: sample an id?
         //printf("XXX %d %d %f %f %f %f\n", id, tid, probs[id], logprobs[id], pt, ptsum);
 
         result.push_back({ id, tid, probs[id], logprobs[id], pt, ptsum, -1, -1, 0.0f, });
@@ -4966,6 +5002,22 @@ int whisper_full_with_state(
     struct whisper_full_params   params,
                    const float * samples,
                            int   n_samples) {
+
+#ifdef GGML_USE_VTUNE
+
+	// __itt_domain * itt_domain = NULL;
+	// __itt_string_handle * sh_sort = NULL; // the overall task name
+
+    itt_domain = __itt_domain_create("my domain"); assert(itt_domain); 
+	__itt_thread_set_name("my main");
+    sh_parts[VT_CONV] = __itt_string_handle_create("conv"); assert(sh_parts[VT_CONV]);
+    sh_parts[VT_ENCODE] = __itt_string_handle_create("encode"); assert(sh_parts[VT_ENCODE]);
+    sh_parts[VT_CROSS] = __itt_string_handle_create("cross"); assert(sh_parts[VT_CROSS]);
+    sh_parts[VT_SAMPLE1] = __itt_string_handle_create("sample1"); assert(sh_parts[VT_SAMPLE1]);    
+    sh_parts[VT_SAMPLE2 ] = __itt_string_handle_create("sample2"); assert(sh_parts[VT_SAMPLE2]);    
+    sh_parts[VT_DECODE ] = __itt_string_handle_create("decode"); assert(sh_parts[VT_DECODE]);    
+#endif
+
     // clear old results
     auto & result_all = state->result_all;
 
@@ -5142,11 +5194,11 @@ int whisper_full_with_state(
 
         bool has_ts;
 
-        whisper_sequence sequence;
+        whisper_sequence sequence;      // xzl: decoded tokens...?
         whisper_grammar grammar;
     };
 
-    std::vector<std::vector<beam_candidate>> bc_per_dec(n_decoders);
+    std::vector<std::vector<beam_candidate>> bc_per_dec(n_decoders);        // xzl: beams (hypotheses) genrated by invidiual decoders
     std::vector<beam_candidate> beam_candidates;
 
     // main loop
@@ -5184,6 +5236,7 @@ int whisper_full_with_state(
 
         int best_decoder_id = 0;
 
+        // vtune_task_begin(3);    // decode overall
         for (int it = 0; it < (int) temperatures.size(); ++it) { // xzl: try all possible temps? but can break?
             const float t_cur = temperatures[it];
 
@@ -5209,7 +5262,7 @@ int whisper_full_with_state(
             n_decoders_cur = std::max(1, n_decoders_cur);
 
             WHISPER_LOG_DEBUG("\n%s: strategy = %d, decoding with %d decoders, temperature = %.2f\n", __func__, params.strategy, n_decoders_cur, t_cur);
-
+            
             // TAGS: WHISPER_DECODER_INIT
             for (int j = 0; j < n_decoders_cur; ++j) {
                 auto & decoder = state->decoders[j];
@@ -5264,21 +5317,21 @@ int whisper_full_with_state(
                 whisper_batch_prep_legacy(state->batch, prompt.data(), prompt.size(), 0, 0); // xzl: put init prompt to a "batch" (ex size can be 1?)
 
                 if (!whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, params.abort_callback, params.abort_callback_user_data)) {
-                    WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);
+                    WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);      // xzl: decode from the init prompt...
                     return -7;
                 }
 
                 {
                     const int64_t t_start_sample_us = ggml_time_us();
 
-                    state->decoders[0].i_batch = prompt.size() - 1;
+                    state->decoders[0].i_batch = prompt.size() - 1;     // xzl: index of the token.. only decoder[0] invoked
 
                     whisper_process_logits(*ctx, *state, state->decoders[0], params, t_cur);
 
-                    for (int j = 1; j < n_decoders_cur; ++j) {
+                    for (int j = 1; j < n_decoders_cur; ++j) { //xzl:propagate kvcache/logits/etc from the seq0 to all other seqs...
                         auto & decoder = state->decoders[j];
 
-                        whisper_kv_cache_seq_cp(state->kv_self, 0, j, -1, -1);
+                        whisper_kv_cache_seq_cp(state->kv_self, 0, j, -1, -1);  
 
                         memcpy(decoder.probs.data(),    state->decoders[0].probs.data(),    decoder.probs.size()*sizeof(decoder.probs[0]));
                         memcpy(decoder.logits.data(),   state->decoders[0].logits.data(),   decoder.logits.size()*sizeof(decoder.logits[0]));
@@ -5288,8 +5341,10 @@ int whisper_full_with_state(
                     state->t_sample_us += ggml_time_us() - t_start_sample_us;
                 }
             }
-
-            for (int i = 0, n_max = whisper_n_text_ctx(ctx)/2 - 4; i < n_max; ++i) {
+                    
+            // xzl: to understand below, can follow t_start_sample_us 
+            for (int i = 0, n_max = whisper_n_text_ctx(ctx)/2 - 4; i < n_max; ++i)  {   // xzl: n_max max output seq?
+                vtune_task_begin(VT_SAMPLE1);    // decode round starts
                 const int64_t t_start_sample_us = ggml_time_us();
 
                 if (params.strategy == whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH) {
@@ -5298,7 +5353,7 @@ int whisper_full_with_state(
                     }
                 }
 
-                // sampling
+                // sampling         xzl: sample for what?? 
                 // TODO: avoid memory allocations, optimize, avoid threads?
                 {
                     std::atomic<int> j_cur(0);
@@ -5311,7 +5366,7 @@ int whisper_full_with_state(
                                 break;
                             }
 
-                            auto & decoder = state->decoders[j];    // each thread exec a decoder instance.... for what
+                            auto & decoder = state->decoders[j];    // xzl:each thread exec a decoder instance (default 5 decoders)
 
                             if (decoder.completed || decoder.failed) {
                                 continue;
@@ -5330,10 +5385,10 @@ int whisper_full_with_state(
                                     } break;
                                 case whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH:
                                     {
-                                        // xzl: spawn more???
+                                        // xzl: each decoder .. sample topk tokens (as well as sort logits, etc
                                         const auto tokens_new = whisper_sample_token_topk(*ctx, decoder, params.beam_search.beam_size);
 
-                                        for (const auto & token : tokens_new) {
+                                        for (const auto & token : tokens_new) { // xzl: for each sampled token, spawn a new sequence
                                             bc_per_dec[j].push_back({ j, decoder.seek_delta, decoder.has_ts, decoder.sequence, decoder.grammar, });
                                             bc_per_dec[j].back().sequence.tokens.push_back(token);
                                             bc_per_dec[j].back().sequence.sum_logprobs_all += token.plog;
@@ -5345,9 +5400,9 @@ int whisper_full_with_state(
 
                     const int n_threads = std::min(params.n_threads, n_decoders_cur);
 
-                    if (n_threads == 1) {
+                    if (n_threads == 1) {       
                         process();
-                    } else {
+                    } else {        // xzl: indeed uses 4 thr (default
                         std::vector<std::thread> threads(n_threads - 1);
 
                         for (int t = 0; t < n_threads - 1; ++t) {
@@ -5371,18 +5426,18 @@ int whisper_full_with_state(
                     }
                 }
 
-                // for beam-search, choose the top candidates and update the KV caches      (xzl: KV cache is for existing prompts...?)
+                // for beam-search, choose the top candidates and update the KV caches      
                 if (params.strategy == whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH) {
                     std::sort(
                             beam_candidates.begin(),
                             beam_candidates.end(),
                             [](const beam_candidate & a, const beam_candidate & b) {
                         return a.sequence.sum_logprobs_all > b.sequence.sum_logprobs_all;
-                    });
+                    });     // xzl: sort all hypotheses (beams
 
                     uint32_t cur_c = 0;
 
-                    for (int j = 0; j < n_decoders_cur; ++j) {
+                    for (int j = 0; j < n_decoders_cur; ++j) {      // xzl: now beams are sorted, find N beams (N= # of decoders...(skip bad ones
                         auto & decoder = state->decoders[j];
 
                         if (decoder.completed || decoder.failed) {
@@ -5398,13 +5453,13 @@ int whisper_full_with_state(
                         while (beam_candidates.size() > cur_c && beam_candidates[cur_c].sequence.sum_logprobs_all == cur.sequence.sum_logprobs_all && i > 0) {
                             ++cur_c;
                         }
-
+                        // xzl: assign a beam can to a decoder...
                         decoder.seek_delta = cur.seek_delta;
                         decoder.has_ts     = cur.has_ts;
                         decoder.sequence   = cur.sequence;
                         decoder.grammar    = cur.grammar;
 
-                        whisper_kv_cache_seq_cp(state->kv_self, cur.decoder_idx, WHISPER_MAX_DECODERS + j, -1, -1);
+                        whisper_kv_cache_seq_cp(state->kv_self, cur.decoder_idx, WHISPER_MAX_DECODERS + j, -1, -1); //xzl copy over self attn kvcache
 
                         WHISPER_LOG_DEBUG("%s: beam search: decoder %d: from decoder %d: token = %10s, plog = %8.5f, sum_logprobs = %8.5f\n",
                                 __func__, j, cur.decoder_idx, ctx->vocab.id_to_token.at(decoder.sequence.tokens.back().id).c_str(), decoder.sequence.tokens.back().plog, decoder.sequence.sum_logprobs_all);
@@ -5416,7 +5471,7 @@ int whisper_full_with_state(
                         if (decoder.completed || decoder.failed) {
                             continue;
                         }
-
+                        // xzl: below???
                         whisper_kv_cache_seq_rm(state->kv_self, j,                           -1, -1);
                         whisper_kv_cache_seq_cp(state->kv_self, WHISPER_MAX_DECODERS + j, j, -1, -1);
                         whisper_kv_cache_seq_rm(state->kv_self, WHISPER_MAX_DECODERS + j,    -1, -1);
@@ -5530,7 +5585,8 @@ int whisper_full_with_state(
                     }
                 }
 
-                state->t_sample_us += ggml_time_us() - t_start_sample_us;
+                state->t_sample_us += ggml_time_us() - t_start_sample_us;       // xzl: end of sampling (a round)
+                vtune_task_end();    // sample1
 
                 // obtain logits for the next token
                 {
@@ -5540,6 +5596,7 @@ int whisper_full_with_state(
 
                     const int n_past = prompt.size() + i;
 
+                    vtune_task_begin(VT_DECODE); 
                     for (int j = 0; j < n_decoders_cur; ++j) {          // xzl: for each decoder instance... 
                         auto & decoder = state->decoders[j];
 
@@ -5566,9 +5623,10 @@ int whisper_full_with_state(
                         WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);          // xzl: run NN to process the whole batch
                         return -8;
                     }
+                    vtune_task_end(); // DECODE
 
-                    const int64_t t_start_sample_us = ggml_time_us();
-
+                    const int64_t t_start_sample_us = ggml_time_us();       // xzl: another sampling. 
+                    vtune_task_begin(VT_SAMPLE2); 
                     // TODO: avoid memory allocations, optimize, avoid threads?
                     {
                         std::atomic<int> j_cur(0);
@@ -5587,7 +5645,7 @@ int whisper_full_with_state(
                                     continue;
                                 }
 
-                                whisper_process_logits(*ctx, *state, decoder, params, t_cur); // xzl: some dark tricks inside? worth parallelization
+                                whisper_process_logits(*ctx, *state, decoder, params, t_cur); // xzl: dark tricks inside...
                             }
                         };
 
@@ -5609,10 +5667,11 @@ int whisper_full_with_state(
                             }
                         }
                     }
-
-                    state->t_sample_us += ggml_time_us() - t_start_sample_us;
+                    vtune_task_end(); // SAMPLE2
+                    state->t_sample_us += ggml_time_us() - t_start_sample_us;           // xzl: sampling ends
                 }
-            }
+                vtune_task_end(); // encode round
+            }   // xzl: end of beam search
 
             // rank the resulting sequences and select the best one
             {
@@ -5674,7 +5733,8 @@ int whisper_full_with_state(
             }
 
             WHISPER_LOG_DEBUG("\n%s: failed to decode with temperature = %.2f\n", __func__, t_cur);
-        }
+        }  // xzl: end of temperature trial 
+        //vtune_task_end(); // decode overall
 
         // output results through a user-provided callback
         {
