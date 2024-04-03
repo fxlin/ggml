@@ -1,3 +1,9 @@
+on mba m2 ...  600ms in total. Aceclerate framework seems to help a lot
+    based on microbenchmark vs. 
+
+
+/////////////////////
+
 whisper_init_from_file_with_params_no_state: loading model from 'models/ggml-base.en.bin'
 whisper_model_load: loading model
 whisper_model_load: n_vocab       = 51864

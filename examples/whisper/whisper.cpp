@@ -2087,7 +2087,7 @@ static bool whisper_encode_internal(
 
         if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
-        }  else { ggml_graph_print(gf); }  // xzl: dump the encoder graph with timing... xzl add
+        } // else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
     }
 
     // cross
