@@ -2773,6 +2773,7 @@ static struct ggml_tensor * ggml_new_tensor_impl(
         /*.name         =*/ { 0 },
         /*.extra        =*/ NULL,
         /*.padding      =*/ { 0 },
+        0, 0, /* xzl: perf_wait_cycles, perf_wait_time_us */
     };
     // xzl: data -- right after the tensor struct? (in the context buf)
 
@@ -10435,7 +10436,7 @@ static void ggml_compute_forward_mul_mat(
         }
         //printf("cblas_sgemm = %.3f ms, %lld flops\n", (ggml_perf_time_us() - tgemm0)/1000.0, ne13*ne12*ne1*ne01*ne10*2);
 
-        //printf("CBLAS = %f ms, %d x %d x %d x %d\n", (ggml_perf_time_us() - t0)/1000.0, ne0, ne1, ne2, ne3);
+        //printf("CBLAS = %f ms, %d x %d x %d x %d\n", (ggml_perf_time_us() - t0)/1000.0, ne0, ne1, ne2, ne3);   // xzl CBLAS debugging...
 
         return;
     }

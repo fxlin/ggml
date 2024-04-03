@@ -42,13 +42,13 @@ option(GGML_BUILD_EXAMPLES          "ggml: build examples" ${GGML_STANDALONE})
 
 option(GGML_TEST_COVERAGE           "ggml: enable test coverage" OFF)
 
-option(GGML_PERF                    "ggml: enable perf timings"          OFF)        # xzl  -- turned on 
-option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)
+option(GGML_PERF                    "ggml: enable perf timings"          ON)        # xzl  -- turned on 
+option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)      
 option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)
 option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
 option(GGML_HIPBLAS                 "ggml: use hipBLAS"                  OFF)
 option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)
-option(GGML_METAL                   "ggml: use Metal"                    OFF)
+option(GGML_METAL                   "ggml: use Metal"                    OFF)        # xzl toggle this 
 
 option(GGML_CUDA_FORCE_DMMV                 "ggml: use dmmv instead of mmvq CUDA kernels"     OFF)
 option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)

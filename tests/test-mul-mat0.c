@@ -239,7 +239,7 @@ int main(int argc, const char ** argv) {
     };
 
     //int64_t ne[4] = {384, 1500, 1, 1 };  // xzl whisper tiny
-    int64_t ne[4] = { 1280, 1500, 1, 1 };  // xzl whisper medium
+    int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
 
     // original loop: 500
     int niter = 1;
