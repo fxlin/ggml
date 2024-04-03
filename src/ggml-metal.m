@@ -2735,6 +2735,7 @@ static ggml_guid_t ggml_backend_metal_guid(void) {
     return &guid;
 }
 
+// xzl: whsiper directly called this
 ggml_backend_t ggml_backend_metal_init(void) {
     struct ggml_metal_context * ctx = ggml_metal_init(GGML_DEFAULT_N_THREADS);
 

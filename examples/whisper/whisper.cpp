@@ -2001,7 +2001,7 @@ static struct ggml_cgraph * whisper_build_graph_cross(
         ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcross, v));
     }
 
-    //ggml_graph_print(gf);
+    //ggml_graph_print(gf);    
 
     ggml_free(ctx0);
 
@@ -2115,7 +2115,7 @@ static bool whisper_encode_internal(
 
         if (!ggml_graph_compute_helper(wstate.backend, gf, n_threads)) {
             return false;
-        } else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
+        } // else { ggml_graph_print(gf); }  // xzl: dump the graph with timing... xzl add
     }
     vtune_task_end(); 
 
