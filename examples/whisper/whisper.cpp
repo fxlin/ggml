@@ -420,7 +420,7 @@ struct whisper_segment {
     bool speaker_turn_next;
 };
 
-// xzl: represnts a text prompt .. of n tokens?s
+// xzl: represnts a text prompt .. of n tokens?
 struct whisper_batch {
     int32_t n_tokens;
 
@@ -533,7 +533,7 @@ static bool whisper_allocr_graph_init(struct whisper_allocr & allocr, ggml_backe
 // default hparams (Whisper tiny)
 struct whisper_hparams {
     int32_t n_vocab       = 51864;
-    int32_t n_audio_ctx   = 1500;
+    int32_t n_audio_ctx   = 1500;       // xzl: the audio length to attend to (during decoding?
     int32_t n_audio_state = 384;        // xzl: feature size
     int32_t n_audio_head  = 6;
     int32_t n_audio_layer = 4;
@@ -636,7 +636,7 @@ struct whisper_layer_decoder {
 struct whisper_kv_cell {
     whisper_pos pos = -1;
 
-    std::set<whisper_seq_id> seq_id;
+    std::set<whisper_seq_id> seq_id;            // xzl: which seq(s) this kv cell belogn to??
 
     bool has_seq_id(const whisper_seq_id & id) const {
         return seq_id.find(id) != seq_id.end();
@@ -644,15 +644,15 @@ struct whisper_kv_cell {
 };
 
 struct whisper_kv_cache {
-    uint32_t head = 0;
-    uint32_t size = 0;
+    uint32_t head = 0;      // xzl??? the start of the current allocation?
+    uint32_t size = 0;      // xzl: free slots? 
 
     // computed before each graph build
     uint32_t n = 0;
 
-    std::vector<whisper_kv_cell> cells;
+    std::vector<whisper_kv_cell> cells;     // xzl: size=seq len? (one cell for each seq pos??
 
-    struct ggml_tensor * k;
+    struct ggml_tensor * k;         // xzl: monoithic k, v for each kvcache.... ?? preallocated?
     struct ggml_tensor * v;
 
     struct ggml_context * ctx = nullptr;
@@ -874,26 +874,27 @@ static void read_safe(whisper_model_loader * loader, T & dest) {
     BYTESWAP_VALUE(dest);
 }
 
+// xzl: preallocate for worst case
 static bool kv_cache_init(
         const struct whisper_hparams & hparams,
              struct whisper_kv_cache & cache,
                       ggml_backend_t   backend,
                            ggml_type   wtype,
-                                 int   n_ctx) {
+                                 int   n_ctx) {  // xzl: n_ctx - longest seq len? (either txt or audio
     const int64_t n_text_state = hparams.n_text_state;
     const int64_t n_text_layer = hparams.n_text_layer;
 
-    const int64_t n_mem      = n_text_layer*n_ctx;
-    const int64_t n_elements = n_text_state*n_mem;
+    const int64_t n_mem      = n_text_layer*n_ctx;      // xzl: #of cached "features" (both cross and self
+    const int64_t n_elements = n_text_state*n_mem;      
 
     struct ggml_init_params params = {
-        /*.mem_size   =*/ 2*ggml_tensor_overhead(),
+        /*.mem_size   =*/ 2*ggml_tensor_overhead(), //xzl:minimum two tensors (k/v)?
         /*.mem_buffer =*/ nullptr,
         /*.no_alloc   =*/ true,
     };
 
     cache.head = 0;
-    cache.size = n_ctx;
+    cache.size = n_ctx;     
 
     cache.cells.clear();
     cache.cells.resize(n_ctx);
@@ -923,6 +924,7 @@ static void kv_cache_free(struct whisper_kv_cache & cache) {
     cache.ctx = nullptr;
 }
 
+// xzl: to udnersatnd better. but seem quite simple mgmt
 static bool whisper_kv_cache_find_slot(
            struct whisper_kv_cache & cache,
         const struct whisper_batch & batch) {
@@ -964,7 +966,7 @@ static bool whisper_kv_cache_find_slot(
     }
 
     for (uint32_t i = 0; i < n_tokens; i++) {
-        cache.cells[cache.head + i].pos = batch.pos[i];
+        cache.cells[cache.head + i].pos = batch.pos[i];     // xzl: seems to mark n cache cells
 
         for (int32_t j = 0; j < batch.n_seq_id[i]; j++) {
             cache.cells[cache.head + i].seq_id.insert(batch.seq_id[i][j]);
@@ -1986,10 +1988,12 @@ static struct ggml_cgraph * whisper_build_graph_cross(
                     Vcross,
                     layer.cross_attn_v_b);
 
-        // xzl: why reshape/transpose. and create copies KV cross??? to be understood....
+        // xzl: why reshape/transpose. and create copies KV cross??? (easier to copy into global kvcache? see below
         Vcross = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcross, n_state, n_ctx));
 
-        struct ggml_tensor * k = ggml_view_1d(ctx0, wstate.kv_cross.k,
+        // xzl:kv_cross -- kvcache for cross attn
+        //      "k" -- a partial "view" (for layer "il") of the monolithic kvcross kv cache...
+        struct ggml_tensor * k = ggml_view_1d(ctx0, wstate.kv_cross.k,  
                 n_state*n_ctx,
                 (ggml_element_size(wstate.kv_cross.k)*n_state)*(il*n_ctx));
 
@@ -1997,7 +2001,7 @@ static struct ggml_cgraph * whisper_build_graph_cross(
                 (   n_ctx)*ggml_element_size(wstate.kv_cross.v),
                 (il*n_ctx)*ggml_element_size(wstate.kv_cross.v)*n_state);
 
-        ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcross, k));
+        ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcross, k));  //xzl:overwrite k,v
         ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcross, v));
     }
 
@@ -2159,7 +2163,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
     const int n_head  = hparams.n_text_head;
     const int n_layer = hparams.n_text_layer;
 
-    const int n_tokens    = batch.n_tokens;
+    const int n_tokens    = batch.n_tokens;  // xzl: =decoding batch size. this handle multiple decoder instances
     const int n_audio_ctx = wstate.exp_n_audio_ctx > 0 ? wstate.exp_n_audio_ctx : hparams.n_audio_ctx;
 
     const int32_t n_kv     = worst_case ? n_ctx            : kv_self.n;
@@ -2233,7 +2237,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
             Kcur = ggml_scale(ctx0, Kcur, KQscale);
 
-            // store key and value to memory
+            // store key and value to memory        
             {
                 struct ggml_tensor * Vcur = ggml_mul_mat(ctx0,
                         layer.attn_v_w,
@@ -2243,14 +2247,14 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
                             Vcur,
                             layer.attn_v_b);
 
-                Vcur = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcur, n_state, n_tokens));
+                Vcur = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcur, n_state, n_tokens)); //xzl:why reshape V to 2d, while K is 1d
 
                 struct ggml_tensor * k = ggml_view_1d(ctx0, kv_self.k, n_tokens*n_state, (ggml_element_size(kv_self.k)*n_state)*(il*n_ctx + kv_head));
                 struct ggml_tensor * v = ggml_view_2d(ctx0, kv_self.v, n_tokens, n_state,
                         (   n_ctx)*ggml_element_size(kv_self.v),
                         (il*n_ctx)*ggml_element_size(kv_self.v)*n_state + kv_head*ggml_element_size(kv_self.v));
 
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k)); // xzl: directly copy to global kv cache
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, v));
             }
 
@@ -2332,7 +2336,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
             Qcur = ggml_scale(ctx0, Qcur, KQscale);
 
-            // Kcross is already scaled
+            // Kcross is already scaled         xzl: below extract from kvcache (cross
             struct ggml_tensor * Kcross =
                 ggml_view_3d(ctx0, wstate.kv_cross.k,
                         n_state/n_head, n_audio_ctx, n_head,
@@ -5353,7 +5357,7 @@ int whisper_full_with_state(
                     }
                 }
 
-                // sampling         xzl: sample for what?? 
+                // sampling         
                 // TODO: avoid memory allocations, optimize, avoid threads?
                 {
                     std::atomic<int> j_cur(0);
@@ -5471,7 +5475,7 @@ int whisper_full_with_state(
                         if (decoder.completed || decoder.failed) {
                             continue;
                         }
-                        // xzl: below???
+                        // xzl: below??? propagte kvcache?
                         whisper_kv_cache_seq_rm(state->kv_self, j,                           -1, -1);
                         whisper_kv_cache_seq_cp(state->kv_self, WHISPER_MAX_DECODERS + j, j, -1, -1);
                         whisper_kv_cache_seq_rm(state->kv_self, WHISPER_MAX_DECODERS + j,    -1, -1);
@@ -5524,7 +5528,7 @@ int whisper_full_with_state(
                         }
 #endif
 
-                        // end of segment
+                        // end of segment           (xzl: triggered by the conds below... will emit text
                         if (token.id == whisper_token_eot(ctx) ||               // end of text token
                            (params.max_tokens > 0 && i >= params.max_tokens) || // max tokens per segment reached
                            (has_ts && seek + seek_delta + 100 >= seek_end)      // end of audio reached
@@ -5581,11 +5585,12 @@ int whisper_full_with_state(
                     }
 
                     if (completed_all) {
+                        vtune_task_end();    // sample1
                         break;
                     }
                 }
 
-                state->t_sample_us += ggml_time_us() - t_start_sample_us;       // xzl: end of sampling (a round)
+                state->t_sample_us += ggml_time_us() - t_start_sample_us;       
                 vtune_task_end();    // sample1
 
                 // obtain logits for the next token
