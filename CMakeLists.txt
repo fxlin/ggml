@@ -27,7 +27,7 @@ set(BUILD_SHARED_LIBS_DEFAULT OFF)
 
 # xzl  -- VTUNE --
 include_directories("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\include")
-add_compile_definitions(GGML_USE_VTUNE)
+# add_compile_definitions(GGML_USE_VTUNE)
 # add_link_options("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\lib64\\libittnotify.lib")
 
 
