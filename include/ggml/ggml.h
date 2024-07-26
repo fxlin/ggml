@@ -311,6 +311,10 @@
     GGML_TENSOR_LOCALS(int64_t, ne,  dst,  ne) \
     GGML_TENSOR_LOCALS(size_t,  nb,  dst,  nb)
 
+// xzl: ex: ne01 == src0, ne[1]
+// ne11 == src1, ne[1]
+// ne1 == dst, ne[1]
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -423,7 +427,7 @@ extern "C" {
         GGML_OP_GROUP_NORM,
 
         GGML_OP_MUL_MAT,
-        GGML_OP_MUL_MAT_ID,
+        GGML_OP_MUL_MAT_ID,             // xzl: indirect mul mat
         GGML_OP_OUT_PROD,
 
         GGML_OP_SCALE,
@@ -2338,6 +2342,7 @@ extern "C" {
 #define GGML_RESTRICT restrict
 #endif
         // xzl: below - funct types for quant, dequant, and quant arithemetics (vec dot)
+        // from x to y
     typedef void (*ggml_to_float_t)  (const void  * GGML_RESTRICT x, float * GGML_RESTRICT y, int k);
     typedef void (*ggml_from_float_t)(const float * GGML_RESTRICT x, void  * GGML_RESTRICT y, int k);
     typedef void (*ggml_vec_dot_t)   (int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT x, size_t bx,

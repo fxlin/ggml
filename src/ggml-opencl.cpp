@@ -479,6 +479,7 @@ __kernel void dequantize_mul_mat_vec_q3_K(__global const struct block_q3_K * xx,
     }
 }
 
+// xzl: in-house impl, b/c ggml's own quantization format
 __kernel void dequantize_mul_mat_vec_q4_K(__global const struct block_q4_K * xx, __local float* tmp, __global float* yy, __global float* dst, const int ncols) {
 
     //to rename it later, just to test now
@@ -1163,7 +1164,7 @@ void ggml_cl_init(void) {
     CL_CHECK((dequantize_mul_mat_vec_q5_K_cl = clCreateKernel(program, "dequantize_mul_mat_vec_q5_K", &err), err));
     CL_CHECK((dequantize_mul_mat_vec_q6_K_cl = clCreateKernel(program, "dequantize_mul_mat_vec_q6_K", &err), err));
 
-    // mul kernel
+    // mul kernel           xzl: fp kenrels .... 
     CL_CHECK((mul_f32_cl = clCreateKernel(program, "mul_f32", &err), err));
 
     CL_CHECK((add_f32_cl = clCreateKernel(program, "add_f32", &err), err));
@@ -1550,10 +1551,10 @@ static void ggml_cl_mul_mat_f32(const ggml_tensor * src0, const ggml_tensor * sr
     const int64_t ne12 = src1->ne[2];
     const int64_t ne13 = src1->ne[3];
 
-    const int nb2  = dst->nb[2];
+    const int nb2  = dst->nb[2];        
     const int nb3  = dst->nb[3];
-
-    const int64_t r2 = ne12 / ne02;
+    
+    const int64_t r2 = ne12 / ne02;     // xzl: broadcast factors into dim2/dim3, cf ggml's C implementation of mul_mat
     const int64_t r3 = ne13 / ne03;
 
     const float alpha = 1.0f;
@@ -1576,10 +1577,10 @@ static void ggml_cl_mul_mat_f32(const ggml_tensor * src0, const ggml_tensor * sr
 
     size_t x_offset = 0;
 
-    for (int64_t i03 = 0; i03 < ne03; i03++) {
+    for (int64_t i03 = 0; i03 < ne03; i03++) {  // xzl: outer loop, src0 dim3 ... 
         // TODO: copy src0 here when r3>1
-        for (int64_t i13 = i03 * r3, e13 = i13 + r3; i13 < e13; i13++) {
-            for (int64_t i02 = 0; i02 < ne02; i02++) {
+        for (int64_t i13 = i03 * r3, e13 = i13 + r3; i13 < e13; i13++) { // xzl: broadcat to src1, dim3
+            for (int64_t i02 = 0; i02 < ne02; i02++) {  // xzl: src0, dim2  ...
                 if (src0->backend == GGML_BACKEND_TYPE_GPU) {
                     x_offset = (i03 * ne02 + i02) * x_ne;
                 } else {
@@ -1587,19 +1588,20 @@ static void ggml_cl_mul_mat_f32(const ggml_tensor * src0, const ggml_tensor * sr
                     CL_CHECK(ggml_cl_h2d_tensor_2d(queue, d_X, 0, src0, i03, i02, NULL));
                 }
 
-                for (int64_t i12 = i02 * r2, e12 = i12 + r2; i12 < e12; i12++) {
+                for (int64_t i12 = i02 * r2, e12 = i12 + r2; i12 < e12; i12++) { // xzl: src1, dim2
                     // copy src1 to device
                     if (src1->backend == GGML_BACKEND_TYPE_CPU) {
                         CL_CHECK(ggml_cl_h2d_tensor_2d(queue, d_Y, 0, src1, i13, i12, NULL));
                     }
-
+                    // xzl: above copy src0/src1 dim0/dim1 to device, then do 2d Gemm there...
                     CL_CHECK(clFinish(queue));
 
-                    // compute
+                    // compute      xzl using cblast:Gemm
+                    // xzl: API ref: https://github.com/CNugteren/CLBlast/blob/master/doc/api.md  basically 2d matmul
                     cl_event ev_sgemm;
                     clblast::StatusCode status = clblast::Gemm<cl_float>(clblast::Layout::kColMajor,
                                                                clblast::Transpose::kYes, clblast::Transpose::kNo,
-                                                               ne01, ne11, ne10,
+                                                               ne01, ne11, ne10,            // xzl: m,n,k
                                                                alpha,
                                                                d_X, x_offset, ne00,
                                                                d_Y, 0, ne10,
@@ -1632,6 +1634,7 @@ static void ggml_cl_mul_mat_f32(const ggml_tensor * src0, const ggml_tensor * sr
     }
 }
 
+// xzl: cf above, similar idea
 static void ggml_cl_mul_mat_f16(const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst, void * wdata, size_t wsize) {
     GGML_ASSERT(fp16_support);
 

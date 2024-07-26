@@ -10320,6 +10320,7 @@ static bool ggml_compute_forward_mul_mat_use_blas(struct ggml_tensor * dst) {
 }
 #endif
 
+// xzl: called in a worker thread
 static void ggml_compute_forward_mul_mat(
         const struct ggml_compute_params * params,
               struct ggml_tensor * dst) {
@@ -10339,17 +10340,20 @@ static void ggml_compute_forward_mul_mat(
 
     const bool src1_cont = ggml_is_contiguous(src1);
 
-    ggml_vec_dot_t    const vec_dot               = type_traits[type].vec_dot;
-    enum ggml_type    const vec_dot_type          = type_traits[type].vec_dot_type;
+    // xzl: funct types for quant, dequant, and quant arithemetics (vec dot)
+    //      "to float" dequant, "from float": convert float to the (FP/INT) type supported by dotproduct?
+    ggml_vec_dot_t    const vec_dot               = type_traits[type].vec_dot;  // xzl: the vecdot kernel
+    enum ggml_type    const vec_dot_type          = type_traits[type].vec_dot_type; // xzl: data type (dst?) expected by vecdot
     ggml_from_float_t const from_float_to_vec_dot = type_traits[vec_dot_type].from_float;
     int64_t           const vec_dot_num_rows      = type_traits[type].nrows;
 
+    // xzl: check dst dim vs source dim, cf GGML_TENSOR_LOCALS_1 defs
     GGML_ASSERT(ne0 == ne01);
     GGML_ASSERT(ne1 == ne11);
     GGML_ASSERT(ne2 == ne12);
     GGML_ASSERT(ne3 == ne13);
 
-    // we don't support permuted src0 or src1
+    // we don't support permuted src0 or src1  (xzl: permuated.. mean what? 
     GGML_ASSERT(nb00 == ggml_type_size(type));
     GGML_ASSERT(nb10 == ggml_type_size(src1->type));
 
@@ -10359,14 +10363,14 @@ static void ggml_compute_forward_mul_mat(
     GGML_ASSERT(nb1 <= nb2);
     GGML_ASSERT(nb2 <= nb3);
 
-    // broadcast factors
+    // broadcast factors        xzl: meaning bdcast dim0/1 ops to dim2/3??
     const int64_t r2 = ne12/ne02;
     const int64_t r3 = ne13/ne03;
 
     // nb01 >= nb00 - src0 is not transposed
     //   compute by src0 rows
 
-#if defined(GGML_USE_CLBLAST)
+#if defined(GGML_USE_CLBLAST)       // xzl: directca ll cl api?
     if (ggml_cl_can_mul_mat(src0, src1, dst)) {
         if (params->ith == 0 && params->type == GGML_TASK_TYPE_COMPUTE) {
             ggml_cl_mul_mat(src0, src1, dst, params->wdata, params->wsize);
@@ -10395,6 +10399,7 @@ static void ggml_compute_forward_mul_mat(
                               float          * const wdata    = (float *) params->wdata + i13*ne12*ne_plane + i12*ne_plane;
                               ggml_to_float_t  const to_float = type_traits[type].to_float;
 
+                        // xzl: just data copy + also dequant? from src0 to wdata (working buf)
                         for (int64_t i01 = ith; i01 < ne01; i01 += nth) {
                             to_float((const char *) x + i01*nb01, wdata + i01*ne00, ne00);
                         }
@@ -10413,6 +10418,8 @@ static void ggml_compute_forward_mul_mat(
             return;
         }
 
+        // xzl: below, parallelize at 2D level, for each 2D matmul, call cblas_sgemm which spawn threads 
+        // on its own... 
         //const int64_t tgemm0 = ggml_perf_time_us();
         for (int64_t i13 = 0; i13 < ne13; i13++) {
             for (int64_t i12 = 0; i12 < ne12; i12++) {
@@ -10442,11 +10449,13 @@ static void ggml_compute_forward_mul_mat(
     }
 #endif
 
-    if (params->type == GGML_TASK_TYPE_INIT) { // xzl: init task, so we do quant??
+    // below: ggml's matmul 
+    if (params->type == GGML_TASK_TYPE_INIT) { // xzl: init task, so we do quant...(?why quant
         if (ith != 0) {
             return;
         }
-        if (src1->type != vec_dot_type) {
+        // xzl: convert src1 to the type supported by vec_dot op??
+        if (src1->type != vec_dot_type) {   // xzl: vec_dot_type ... vecprod output type?? 
             char * wdata = params->wdata;
             const size_t row_size = ggml_row_size(vec_dot_type, ne10);
 
@@ -10456,6 +10465,8 @@ static void ggml_compute_forward_mul_mat(
             for (int64_t i13 = 0; i13 < ne13; ++i13) {
                 for (int64_t i12 = 0; i12 < ne12; ++i12) {
                     for (int64_t i11 = 0; i11 < ne11; ++i11) {
+                        // xzl: convert src1 to type needed by vecdot (in wdata, workspace?
+                        //          src0 weights, already quantized??
                         from_float_to_vec_dot((float *)((char *) src1->data + i13*nb13 + i12*nb12 + i11*nb11), (void *) wdata, ne10);
                         wdata += row_size;
                     }
@@ -10559,7 +10570,7 @@ static void ggml_compute_forward_mul_mat(
 
                 for (int64_t ir0 = iir0; ir0 < iir0 + blck_0 && ir0 < ir011; ir0 += nrc) {
                     vec_dot(ne00, &tmp[ir0 - iir0], (nrc>1 ? 16 : 0), src0_row + ir0*nb01, (nrc>1 ? nb01 : 0), src1_col, (nrc>1 ? src1_col_stride : 0), nrc);
-                }
+                }  // xzl: results in tmp? (s??) then copied to dst below 
 
                 for (int cn = 0; cn < nrc; ++cn) {
                     memcpy(&dst_col[iir0 + cn*nb1/nb0], tmp + (cn*16), (MIN(iir0 + blck_0, ir011) - iir0)*sizeof(float));

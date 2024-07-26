@@ -1307,8 +1307,8 @@ static bool ggml_metal_graph_compute(
                         GGML_ASSERT(ne12 % ne02 == 0);
                         GGML_ASSERT(ne13 % ne03 == 0);
 
-                        const uint r2 = ne12/ne02;
-                        const uint r3 = ne13/ne03;
+                        const uint r2 = ne12/ne02;      // xzl: brdcast factor? dim2
+                        const uint r3 = ne13/ne03;      // xzl: brdcast factor? dim3
 
                         // find the break-even point where the matrix-matrix kernel becomes more efficient compared
                         // to the matrix-vector kernel
@@ -1387,6 +1387,7 @@ static bool ggml_metal_graph_compute(
                             [encoder setBytes:&r2      length:sizeof(r2)   atIndex:13];
                             [encoder setBytes:&r3      length:sizeof(r3)   atIndex:14];
                             [encoder setThreadgroupMemoryLength:8192 atIndex:0];
+                            // xzl: note grid size.. partition along dim1? 32 for src1, 64 for src0 
                             [encoder dispatchThreadgroups:MTLSizeMake( (ne11 + 31)/32, (ne01 + 63)/64, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
                         } else {
                             int nth0 = 32;

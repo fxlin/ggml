@@ -30,6 +30,11 @@ include_directories("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\
 add_compile_definitions(GGML_USE_VTUNE)
 # add_link_options("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\lib64\\libittnotify.lib")
 
+# xzl: windows, cuda 
+set(CudaToolkitDir "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5")
+set(CUDAToolkit_ROOT "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5")
+# set(CMAKE_CUDA_ARCHITECTURES "native")
+# set(CMAKE_CUDA_COMPILER "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/bin/nvcc.exe")
 
 # options
 
@@ -47,14 +52,13 @@ option(GGML_BUILD_EXAMPLES          "ggml: build examples" ${GGML_STANDALONE})
 
 option(GGML_TEST_COVERAGE           "ggml: enable test coverage" OFF)
 
-option(GGML_PERF                    "ggml: enable perf timings"          ON)        # xzl  -- turned on 
 option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)      
 option(GGML_PERF                    "ggml: enable perf timings"          ON)        # xzl  -- turned on 
 option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)
 option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)        # xzl -- toggled this
 option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
 option(GGML_HIPBLAS                 "ggml: use hipBLAS"                  OFF)
-option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)
+option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)       # xzl
 option(GGML_METAL                   "ggml: use Metal"                    OFF)        # xzl toggle this 
 
 option(GGML_CUDA_FORCE_DMMV                 "ggml: use dmmv instead of mmvq CUDA kernels"     OFF)

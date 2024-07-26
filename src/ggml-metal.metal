@@ -51,7 +51,8 @@ enum ggml_sort_order {
 // general-purpose kernel for addition, multiplication and division of two tensors
 // pros: works for non-contiguous tensors, supports broadcast across all dims
 // cons: not very efficient
-// xzl: src0/src1 seem fp. see code below
+// xzl: element wise ops. structures are the smae 
+// src0/src1 seem fp. see code below
 kernel void kernel_add(
         device const char * src0,
         device const char * src1,
@@ -84,10 +85,13 @@ kernel void kernel_add(
         uint3 tgpig[[threadgroup_position_in_grid]],
         uint3 tpitg[[thread_position_in_threadgroup]],
         uint3   ntg[[threads_per_threadgroup]]) {
+    // xzl: thr grid 3D - map to tensor dim1,2,3
+    // thr group. 1D. map to tensor dim0
     const int64_t i03 = tgpig.z;
     const int64_t i02 = tgpig.y;
     const int64_t i01 = tgpig.x;
 
+    // xzl: tensor 1 (i.e. tensor B) broadcast to A....
     const int64_t i13 = i03 % ne13;
     const int64_t i12 = i02 % ne12;
     const int64_t i11 = i01 % ne11;
@@ -96,12 +100,14 @@ kernel void kernel_add(
     device const char * src1_ptr = src1 + i13*nb13 + i12*nb12 + i11*nb11;
     device       char * dst_ptr  = dst  + i03*nb3  + i02*nb2  + i01*nb1  + offs;
 
+    // xzl: threads in a gropu interleaved along dim 0 ... better cache locality?
     for (int i0 = tpitg.x; i0 < ne0; i0 += ntg.x) {
         const int i10 = i0 % ne10;      // xzl: below -- fp arthiemetics
         *((device float *)(dst_ptr + i0*nb0)) = *((device float *)(src0_ptr + i0*nb00)) + *((device float *)(src1_ptr + i10*nb10));
     }
 }
 
+// xzl: cf above 
 kernel void kernel_mul(
         device const char * src0,
         device const char * src1,
@@ -151,6 +157,7 @@ kernel void kernel_mul(
     }
 }
 
+// xzl: cf above
 kernel void kernel_div(
         device const char * src0,
         device const char * src1,
@@ -202,6 +209,9 @@ kernel void kernel_div(
 
 // assumption: src1 is a row
 // broadcast src1 into src0
+//  xzl: re: buffer(28) -- ignore all buffer args before it. cf ggml_metal_graph_compute
+//      nb: num of blocks, each block 4 floats. (note "float4")
+// grid(n,1,1) group(1,1,1)   <---why do this
 kernel void kernel_add_row(
         device const float4 * src0,
         device const float4 * src1,
@@ -333,6 +343,9 @@ kernel void kernel_sum_rows(
     int64_t i2 = tpig.y;
     int64_t i1 = tpig.x;
 
+    // xzl: grid 3D (tensor dim1,2,3)
+    // 1 thr per group (1,1,1), going through dim0
+
     if (i3 >= ne03 || i2 >= ne02 || i1 >= ne01) {
         return;
     }
@@ -349,6 +362,8 @@ kernel void kernel_sum_rows(
     dst_row[0] = row_sum;
 }
 
+// xzl: src1 mask-used to marks certain elements. 
+//      src2 position-based factor? applied to the raw input
 kernel void kernel_soft_max(
         device const float * src0,
         device const float * src1,
@@ -392,20 +407,21 @@ kernel void kernel_soft_max(
     // parallel max
     float lmax = -INFINITY;
 
-    for (int i00 = tpitg; i00 < ne00; i00 += ntg) {
+    for (int i00 = tpitg; i00 < ne00; i00 += ntg) {     // xzl: threads in a group, interleaved. ech thread find its max
         lmax = MAX(lmax, psrc0[i00]*scale + (pmask ? pmask[i00] : 0.0f) + (ppos ? slope*ppos[i00] : 0.0f));
     }
 
     // find the max value in the block
-    float max_val = simd_max(lmax);
-    if (ntg > N_SIMDWIDTH) {
+    // xzl: two-level max (leveraging simdgroup, 32-width). note ntg <32*32 (cf GGML_OP_SOFT_MAX ggml-metal.m)
+    float max_val = simd_max(lmax);     // xzl: across the simd group... then broadcast... COOL
+    if (ntg > N_SIMDWIDTH) {        // xzl: threagropu has > 1 simd groups...
         if (sgitg == 0) {
-            buf[tiisg] = -INFINITY;
+            buf[tiisg] = -INFINITY;     // xzl: clear? 
         }
 
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
-        if (tiisg == 0) {
+        if (tiisg == 0) {       // xzl: thread 0 in each simd group...copy the max val of that simdgroup....to buf
             buf[sgitg] = max_val;
         }
 
@@ -415,9 +431,9 @@ kernel void kernel_soft_max(
         max_val = simd_max(max_val);
     }
 
-    // parallel sum
+    // parallel sum         xzl: note the exp. so it's expsum
     float lsum = 0.0f;
-    for (int i00 = tpitg; i00 < ne00; i00 += ntg) {
+    for (int i00 = tpitg; i00 < ne00; i00 += ntg) { // xzl: thread interleaved. same as aboe
         const float exp_psrc0 = exp((psrc0[i00]*scale + (pmask ? pmask[i00] : 0.0f) + (ppos ? slope*ppos[i00] : 0.0f)) - max_val);
         lsum += exp_psrc0;
         pdst[i00] = exp_psrc0;
@@ -427,6 +443,7 @@ kernel void kernel_soft_max(
     // ref: https://github.com/ggerganov/ggml/pull/621#discussion_r1425156335
     threadgroup_barrier(mem_flags::mem_none);
 
+    // xzl: two level sum (simdgroup), as above 
     float sum = simd_sum(lsum);
 
     if (ntg > N_SIMDWIDTH) {
@@ -448,7 +465,7 @@ kernel void kernel_soft_max(
 
     const float inv_sum = 1.0f/sum;
 
-    for (int i00 = tpitg; i00 < ne00; i00 += ntg) {
+    for (int i00 = tpitg; i00 < ne00; i00 += ntg) { // xzl: element-wise op. threads interleaved
         pdst[i00] *= inv_sum;
     }
 }
@@ -616,17 +633,17 @@ kernel void kernel_norm(
         uint   ntg[[threads_per_threadgroup]]) {
     device const float * x = (device const float *) ((device const char *) src0 + tgpig*nb01);
     // MEAN
-    // parallel sum
+    // parallel sum       xzl: along dim0, threads in a thrgrp interleaved...
     sum[tpitg] = 0.0f;
     for (int i00 = tpitg; i00 < ne00; i00 += ntg) {
         sum[tpitg] += x[i00];
     }
-    // reduce
+    // reduce           xzl: each iteration reduce by 2x (sum) ... cool 
     threadgroup_barrier(mem_flags::mem_threadgroup);
     for (uint i = ntg/2; i > 0; i /= 2) {
         if (tpitg < i) {
             sum[tpitg] += sum[tpitg + i];
-        }
+        }   // xzl: threads > i  will just do nothing (idle
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
     const float mean  = sum[0] / ne00;
@@ -635,9 +652,9 @@ kernel void kernel_norm(
     threadgroup_barrier(mem_flags::mem_threadgroup);
     device float * y = dst + tgpig*ne00;
     sum[tpitg] = 0.0f;
-    for (int i00 = tpitg; i00 < ne00; i00 += ntg) {
+    for (int i00 = tpitg; i00 < ne00; i00 += ntg) { // xzl: same as above, threads in a group interleaved...
         y[i00] = x[i00] - mean;
-        sum[tpitg] += y[i00] * y[i00];
+        sum[tpitg] += y[i00] * y[i00];      // xzl: accumulate variance...
     }
 
     // reduce
@@ -1154,8 +1171,11 @@ kernel void kernel_mul_mv_q8_0_f32(
     kernel_mul_mv_q8_0_f32_impl(src0,src1,dst,ne00,ne01,ne02,ne10,ne12,ne0,ne1,r2,r3,tgpig,tiisg,sgitg);
 }
 
-#define N_F32_F32 4
+#define N_F32_F32 4         // xzl: each thr group: 4 rows from mat (src1), mul with vec (src0)
 
+// xzl: matrix-vector mul?? 
+// src0: vec; src1: mat
+// may 2025: understood ~50%
 void kernel_mul_mv_f32_f32_impl(
         device const  char * src0,
         device const  char * src1,
@@ -1180,7 +1200,7 @@ void kernel_mul_mv_f32_f32_impl(
         uint  tiisg[[thread_index_in_simdgroup]]) {
 
     const int64_t r0 = tgpig.x;
-    const int64_t rb = tgpig.y*N_F32_F32;
+    const int64_t rb = tgpig.y*N_F32_F32;           // xzl: this thrgroup's row offset into src1 (mat) ?
     const int64_t im = tgpig.z;
 
     const uint i12 = im%ne12;
@@ -1200,13 +1220,13 @@ void kernel_mul_mv_f32_f32_impl(
             device const float * y = (device const float *) (src1 + r1*nb11 + im*nb12);
 
             float sumf = 0;
-            for (int i = tiisg; i < ne00; i += 32) {
+            for (int i = tiisg; i < ne00; i += 32) {    // xzl: inner product....?
                 sumf += (float) x[i] * (float) y[i];
             }
 
             float all_sum = simd_sum(sumf);
             if (tiisg == 0) {
-                dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;
+                dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;        // xzl: sum and store
             }
         }
     } else {
@@ -5340,8 +5360,13 @@ kernel void kernel_get_rows_i32(
 }
 
 
+// xzl: may 2024 understdood ~70% 
 // xzl: "simdgroup matrix" -- cf shader lang. like, simdgroup_float8x8, 
 //  a block .. 64x32? 
+
+// xzl: note grid size.. partition along dim1? 32 for src1, 64 for src0. 
+// [encoder dispatchThreadgroups:MTLSizeMake( (ne11 + 31)/32, (ne01 + 63)/64, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
+// then 32 (BLOCK_SIZE_K) along dim0
 
 #define BLOCK_SIZE_M 64 // 8 simdgroup matrices from matrix A
 #define BLOCK_SIZE_N 32 // 4 simdgroup matrices from matrix B
@@ -5377,7 +5402,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
                         uint                  tiitg[[thread_index_in_threadgroup]],
                         uint                  sgitg[[simdgroup_index_in_threadgroup]]) {
 
-    // xzl: shared_memory how large?? set by caller??
+    // xzl: shared_memory cf; ggml-metal.m "[encoder setThreadgroupMemoryLength:8192 atIndex:0];"
     threadgroup half  * sa = (threadgroup half  *)(shared_memory);
     threadgroup float * sb = (threadgroup float *)(shared_memory + 4096);
 
@@ -5400,7 +5425,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
         c_res[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
     }
 
-    // xzl: below are just for loading/storing of threadgroup memory?? (per core)
+    // xzl: below are just for loading/storing of threadgroup memory (per core)
     short il = (tiitg % THREAD_PER_ROW);  // xzl: thread id for that row?
 
     const uint i12 = im%ne12;
@@ -5416,13 +5441,16 @@ void kernel_mul_mm_impl(device const  uchar * src0,
         + nb11 * (r1 * BLOCK_SIZE_N + thread_col)
         + nb10 * (BLOCK_SIZE_K / THREAD_PER_COL * (tiitg % THREAD_PER_COL)));
 
+    // xzl: each iteartion process 4 simdmat along M, 2 simdmat along N, ... for BLOCK_SIZE_K/8 times
+    //          so # of simdmat mul = 8 x ne00/BLOCK_SIZE_K
     for (int loop_k = 0; loop_k < ne00; loop_k += BLOCK_SIZE_K) {
         // load data and store to threadgroup memory
         half4x4 temp_a;
         dequantize_func(x, il, temp_a); // xzl: dequant on gpu... x points to block. temp_a large enough?
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
-        // xzl: flatten (reshape dequant res, temp_a) into threadgroup memory (sa)?
+        // xzl: flatten 16 (4x4) values (reshape dequant res, temp_a) into threadgroup memory (sa)?
+        //          so that they can load to simdmatrix (8x8)
         #pragma unroll(16)
         for (int i = 0; i < 16; i++) {
             *(sa + SG_MAT_SIZE * ((tiitg / THREAD_PER_ROW / 8) \
@@ -5440,9 +5468,10 @@ void kernel_mul_mm_impl(device const  uchar * src0,
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
         // load matrices from threadgroup memory and conduct outer products
+        //      xzl meaning load to memory to simdgroup, see below
+        //          THREAD_MAT_M, THREAD_MAT_N  --- # of simdmatrices loaded by each thread (4 and 2)
         threadgroup half  * lsma = (sa + THREAD_MAT_M * SG_MAT_SIZE * (sgitg % 2));
         threadgroup float * lsmb = (sb + THREAD_MAT_N * SG_MAT_SIZE * (sgitg / 2));
-
 
         #pragma unroll(4)
         for (int ik = 0; ik < BLOCK_SIZE_K / 8; ik++) {
@@ -5459,10 +5488,11 @@ void kernel_mul_mm_impl(device const  uchar * src0,
             lsma += BLOCK_SIZE_M / SG_MAT_ROW * SG_MAT_SIZE;
             lsmb += BLOCK_SIZE_N / SG_MAT_ROW * SG_MAT_SIZE;
 
+            // xzl: mb 2x1 simdmatrix, ma 1x4 simdmatrix... then blockwise multiplication
             #pragma unroll(8)
             for (int i = 0; i < 8; i++){
                 simdgroup_multiply_accumulate(c_res[i], mb[i/4], ma[i%4], c_res[i]);
-                // xzl: this seems the core. is it dot product? or matmul??
+                // xzl: the lowest level kern. d=a*b+c. each is a 8x8 simdgroup_matrix
             }
         }
     }
