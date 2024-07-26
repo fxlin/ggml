@@ -48,3 +48,4 @@ ggml.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 ggml.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
 ggml.xcworkspace/xcuserdata/felixlin.xcuserdatad/WorkspaceSettings.xcsettings
 .swiftpm/xcode/xcshareddata/xcschemes/ggml.xcscheme
+/build-cuda
