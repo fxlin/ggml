@@ -389,7 +389,8 @@ if (GGML_CUDA_SOURCES)
         # Only configure gmml CUDA architectures is not globally set
         if (NOT DEFINED GGML_CUDA_ARCHITECTURES)
             # Not overriden by user, so set defaults
-            set(GGML_CUDA_ARCHITECTURES 52 61 70)
+            # set(GGML_CUDA_ARCHITECTURES 52 61 70) 
+            set(GGML_CUDA_ARCHITECTURES 50 52 61 70)    # xzl: 50 for quadro k2200. there might be a better way to specify from command line but i didnt figure out...
         endif()
         message(STATUS "GGML Configuring CUDA architectures ${GGML_CUDA_ARCHITECTURES}")
         set_property(TARGET ggml  PROPERTY CUDA_ARCHITECTURES ${GGML_CUDA_ARCHITECTURES})
