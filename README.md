@@ -125,7 +125,8 @@ cmake -DGGML_CUBLAS=ON -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.1/bin/nvcc ..
 # xzl
 ```bash
 # under ggml/
-CMAKE_CUDA_ARCHITECTURES="50 52 61 70" cmake -B build-cuda -DGGML_CUBLAS=ON
+cmake -B build-cuda -DGGML_CUBLAS=ON -DCMAKE_CUDA_ARCHITECTURES="50;52;61;70" 
+# windows: do it from x64 Native tools comamnd prompot. no vs launch needed
 cmake --build build-cuda -j --config Release
 ```
 

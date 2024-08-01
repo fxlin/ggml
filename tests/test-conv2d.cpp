@@ -20,6 +20,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <stdlib.h>
 
 static void ggml_log_callback_default(ggml_log_level level, const char * text, void * user_data) {
     (void) level;
@@ -36,10 +37,10 @@ struct test_model {
     struct ggml_context * ctx;
 };
 
-void load_model(test_model & model, bool use_gpu = false) {
+void load_model(test_model & model, bool use_gpu = false, int input_width=8, int input_height=6, int kernel_size=3) {
     // create data
-    int KW = 3, KH = 3, IC = 10, OC = 10;
-    int IW = 8, IH = 6, N = 1;
+    int KW = kernel_size, KH = kernel_size, IC = 64, OC = 64;
+    int IW = input_width, IH = input_height, N = 1;
 
     // Initialize adata
     float * adata = new float[KW * KH * IC * OC];
@@ -77,12 +78,12 @@ void load_model(test_model & model, bool use_gpu = false) {
     // initialize the backend
 #ifdef GGML_USE_CUBLAS
     if (use_gpu) {
-        fprintf(stderr, "%s: using CUDA backend\n", __func__);
+        fprintf(stderr, "%s: >>>>>>>> using CUDA backend\n", __func__);
         model.backend = ggml_backend_cuda_init(0);
         if (!model.backend) {
             fprintf(stderr, "%s: ggml_backend_cuda_init() failed\n", __func__);
         }
-    }
+    } 
 #endif
 
 #ifdef GGML_USE_METAL
@@ -98,6 +99,7 @@ void load_model(test_model & model, bool use_gpu = false) {
 
     if(!model.backend) {
         // fallback to CPU backend
+        fprintf(stderr, "%s: >>>>>>> fallback to CPU backend\n", __func__);
         model.backend = ggml_backend_cpu_init();
     }
 
@@ -199,12 +201,18 @@ struct ggml_cgraph * compute_graph(const test_model & model, ggml_gallocr_t allo
     return gf;
 }
 
-int main(void)
+//
+// Usage: ./test-cond2d.exe W H K usegpu
+//      W/H input dimension
+//      K: kernel size = kxK ,   64 channels 
+//            usegpu (0|1)
+
+int main(int argc, char *argv[])
 {
     ggml_time_init();
 
     test_model model;
-    load_model(model, true);
+    load_model(model, atoi(argv[4]), atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
 
     ggml_gallocr_t allocr = NULL;
 
@@ -219,9 +227,11 @@ int main(void)
         size_t mem_size = ggml_gallocr_get_buffer_size(allocr, 0);
         fprintf(stderr, "%s: compute buffer size: %.2f MB\n", __func__, mem_size/1024.0f/1024.0f);
     }
-
+    int64_t start_time = ggml_time_us();
     struct ggml_cgraph * gf_res = compute_graph(model, allocr);
-
+    int64_t end_time = ggml_time_us();
+    printf("\nMain compute finished.");
+    fprintf(stderr, "%s: Latency: %f s\n", __func__, (end_time - start_time) / 1000000.0);
     struct ggml_tensor * im2col_res = NULL;
     struct ggml_tensor * conv2d_res = NULL;
 
