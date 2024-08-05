@@ -1,5 +1,10 @@
 To build
 
+e: 
+cd workspace-ggml/ggml/
+
+
+# config
 # under ggml/
 cmake -B build-cuda -DGGML_CUBLAS=ON -DCMAKE_CUDA_ARCHITECTURES="50;52;61;70" 
 

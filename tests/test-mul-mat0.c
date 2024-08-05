@@ -268,8 +268,8 @@ int main(int argc, const char ** argv) {
 
         // xzl: dim0 must match. dim1 can be diff. then dim2/3 must match...
 
-        int64_t ne0[4] = { 2048, 2048, 1, 1 };  
-        int64_t ne1[4] = { 2048, 1, 1, 1 };  
+        int64_t ne0[4] = { 1024, 512, 1, 1 };  
+        int64_t ne1[4] = { 1024, 512, 1, 1 };  
 
         n_threads = n_thrs[iter];
 
