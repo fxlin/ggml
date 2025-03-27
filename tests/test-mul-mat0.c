@@ -243,10 +243,6 @@ int main(int argc, const char ** argv) {
         .no_alloc   = false,
     };
 
-    //int64_t ne[4] = {384, 1500, 1, 1 };  // xzl whisper tiny
-    int64_t ne[4] = { 1024, 1500, 1, 1 };  // xzl whisper medium
-    // int64_t ne[4] = { 4096, 1500, 1, 1 };  
-
     // original loop: 500
     int niter = 1;
     const char *env = getenv("GGML_NLOOP");
@@ -257,11 +253,27 @@ int main(int argc, const char ** argv) {
         niter = atoi(argv[1]);
     }
 
-    int n_thrs[] = { 1,2,4,6 }; // xzl
-    int n_threads; // = 4; // xzl 1;
+    int n_thrs[] = { 1,2,4,6 }; int n_threads; // xzl
+    
     niter = sizeof(n_thrs) / sizeof(int);
 
     for (int iter = 0; iter < niter; ++iter) {
+
+        //int64_t ne[4] = {384, 1500, 1, 1 };  // whisper tiny
+        // int64_t ne[4] = { 1024, 1500, 1, 1 };  // whisper medium
+        // int64_t ne[4] = { 1024, 1, 1, 1 };  // mat-vec prod
+        // int64_t ne[4] = { 1024, 512, 1, 1 };  // mat-mat mul
+        //int64_t ne[4] = { 1024, 1024, 1, 1 };  // rwkv projection
+        // int64_t ne[4] = { 1024, 1024, 4, 1 };  // rwkv projection, batched    
+
+        // xzl: dim0 must match. dim1 can be diff. then dim2/3 must match...
+
+        // int64_t ne0[4] = { 1024, 512, 1, 1 };  
+        // int64_t ne1[4] = { 1024, 512, 1, 1 };  
+
+        int64_t ne0[4] = { 1024, 1024, 1, 1 };  
+        int64_t ne1[4] = { 1024, 1, 1, 1 };  
+
         n_threads = n_thrs[iter];
 
         printf("test-mul-mat0: iter:%d/%d #threads %d\n", iter, niter, n_threads);
@@ -277,12 +289,13 @@ int main(int argc, const char ** argv) {
             const int nargs = 1;
 
             //for (int ndims = 2; ndims <= 4; ++ndims) {      // xzl: test from 2dim to 4dim tensors...
-            for (int ndims = 3; ndims <= 3; ++ndims) {      // xzl: test from 2dim to 4dim tensors...
-                x[0] = get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f);
-                //ne[1] = rand()%4 + 1;       // xzl: dim0 must match. dim1 can be diff. then dim2/3 must match...
-                ne[1] = ne[0];   // xzl
+            for (int ndims = 3; ndims <= 3; ++ndims) {      // xzl: x0, x1 both 3dim tensors
+                //////// xzl: x[0], dim=(1,ne1,ne0)
+                x[0] = get_random_tensor(ctx0, ndims, ne0, -1.0f, 1.0f);
 
-                x[1] = get_random_tensor(ctx0, ndims, ne, -1.0f, 1.0f);
+                ////// x1            
+                // ne[1] = ne[0];   // xzl: x[1], dim=(1,ne0,ne0)
+                x[1] = get_random_tensor(ctx0, ndims, ne1, -1.0f, 1.0f);
 
                 ggml_set_param(ctx0, x[0]);
 
@@ -316,7 +329,7 @@ int main(int argc, const char ** argv) {
         }
 
         // mul_mat (transposed)
-        if (0) // xzl
+#if 0   // xzl
         {
             const int nargs = 1;
 
@@ -352,6 +365,7 @@ int main(int argc, const char ** argv) {
                 check_mat_mul(m, x[1], x[0]);
             }
         }
+#endif        
         ggml_free(ctx0);
     }
 

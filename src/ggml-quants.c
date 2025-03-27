@@ -4012,13 +4012,14 @@ static inline __m128i get_scale_shuffle(int i) {
 }
 #endif
 
-// xzl: quant arithmetics....
+// xzl: quant arithmetics.... this processes mutiple quant "block" (eg QK8_0, 32 elements in a vec)
 // xzl: s=vx*vy, vx vy quantized, bs stride in s (?)  
+//      block_q4_0 x block_q8_0 = block_q8_0(? or FP??)
 // n: total # elements. nrc: # of row processed at a time, 1 or 2 (some backend can do). 
 //      bx, by: row/col sizes for x/y (vectors)
 void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * restrict vx, size_t bx, const void * restrict vy, size_t by, int nrc) {
     const int qk = QK8_0;
-    const int nb = n / qk;
+    const int nb = n / qk;  // xzl: nb: # of quant blocks
 
     assert(n % qk == 0);
 #if defined(__ARM_FEATURE_MATMUL_INT8)
@@ -4033,10 +4034,11 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
     UNUSED(bs);
 
     const block_q4_0 * restrict x = vx;
-    const block_q8_0 * restrict y = vy;
+    const block_q8_0 * restrict y = vy;     //xzl: y is activation so q8??
 
+// xzl: special treatment for nrc==2. vx vy each has two buffers .... (two row/col at a time)
 #if defined(__ARM_FEATURE_MATMUL_INT8)
-    if (nrc == 2) {     // xzl: vx vy each has two buffers .... (two row/col at a time)
+    if (nrc == 2) {     
         const block_q4_0 * restrict vx0 = vx;
         const block_q4_0 * restrict vx1 = vx + bx;  // xzl: stride??
 
@@ -4106,15 +4108,17 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
 #if defined(__ARM_NEON)
     float32x4_t sumv0 = vdupq_n_f32(0.0f);
     float32x4_t sumv1 = vdupq_n_f32(0.0f);
-
+`
     assert(nb % 2 == 0); // TODO: handle odd nb
 
     for (int i = 0; i < nb; i += 2) {
+        // xzl: two blocks in x, two blocks in y 
         const block_q4_0 * restrict x0 = &x[i + 0];
         const block_q4_0 * restrict x1 = &x[i + 1];
         const block_q8_0 * restrict y0 = &y[i + 0];
         const block_q8_0 * restrict y1 = &y[i + 1];
 
+        // xzl: below dequant (expand) x to INT8
         const uint8x16_t m4b = vdupq_n_u8(0x0F);
         const int8x16_t  s8b = vdupq_n_s8(0x8);
 
@@ -4133,7 +4137,7 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
         const int8x16_t v0_1ls = vsubq_s8(v0_1l, s8b);
         const int8x16_t v0_1hs = vsubq_s8(v0_1h, s8b);
 
-        // load y
+        // load y       xzl: no dequant needed, delta (d) to be applied below
         const int8x16_t v1_0l = vld1q_s8(y0->qs);
         const int8x16_t v1_0h = vld1q_s8(y0->qs + 16);
         const int8x16_t v1_1l = vld1q_s8(y1->qs);
@@ -4143,10 +4147,11 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
         const int32x4_t p_0 = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), v0_0ls, v1_0l), v0_0hs, v1_0h);
         const int32x4_t p_1 = ggml_vdotq_s32(ggml_vdotq_s32(vdupq_n_s32(0), v0_1ls, v1_1l), v0_1hs, v1_1h);
 
+        // xzl: scale and convert to FP (vmlaq_n_f32 is multiply-add)
         sumv0 = vmlaq_n_f32(sumv0, vcvtq_f32_s32(p_0), GGML_FP16_TO_FP32(x0->d)*GGML_FP16_TO_FP32(y0->d));
         sumv1 = vmlaq_n_f32(sumv1, vcvtq_f32_s32(p_1), GGML_FP16_TO_FP32(x1->d)*GGML_FP16_TO_FP32(y1->d));
     }
-
+    // xzl: pairwise (?) add FP, then add back 
     *s = vaddvq_f32(sumv0) + vaddvq_f32(sumv1);
 #elif defined(__AVX2__)
     // Initialize accumulator with zeros
@@ -4370,17 +4375,19 @@ void ggml_vec_dot_q4_0_q8_0(int n, float * restrict s, size_t bs, const void * r
     for (int i = 0; i < nb; i++) {
         int sumi = 0;
 
+        // xzl: inner loop processes 1 quant block in x & y 
+        //      x is in q4, so extract two elements at a time;
         for (int j = 0; j < qk/2; ++j) {
             const int v0 = (x[i].qs[j] & 0x0F) - 8;
             const int v1 = (x[i].qs[j] >>   4) - 8;
 
-            sumi += (v0 * y[i].qs[j]) + (v1 * y[i].qs[j + qk/2]);
+            sumi += (v0 * y[i].qs[j]) + (v1 * y[i].qs[j + qk/2]);  // xzl: dotprod w/ two elements in y
         }
 
-        sumf += sumi*GGML_FP16_TO_FP32(x[i].d)*GGML_FP16_TO_FP32(y[i].d);
+        sumf += sumi*GGML_FP16_TO_FP32(x[i].d)*GGML_FP16_TO_FP32(y[i].d); // xzl: scale(?) the sum with delta
     }
 
-    *s = sumf;
+    *s = sumf; //xzl:output is FP
 #endif
 }
 

@@ -25,6 +25,17 @@ endif()
 
 set(BUILD_SHARED_LIBS_DEFAULT OFF)
 
+# xzl  -- VTUNE --
+include_directories("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\include")
+# add_compile_definitions(GGML_USE_VTUNE)
+# add_link_options("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\lib64\\libittnotify.lib")
+
+# xzl: windows, cuda 
+set(CudaToolkitDir "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5")
+set(CUDAToolkit_ROOT "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.5")
+# set(CMAKE_CUDA_ARCHITECTURES "native")
+# set(CMAKE_CUDA_COMPILER "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.5/bin/nvcc.exe")
+
 # options
 
 option(BUILD_SHARED_LIBS            "ggml: build shared libs" ${BUILD_SHARED_LIBS_DEFAULT})
@@ -47,8 +58,8 @@ option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)
 option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)        # xzl -- toggled this
 option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
 option(GGML_HIPBLAS                 "ggml: use hipBLAS"                  OFF)
-option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)
-option(GGML_METAL                   "ggml: use Metal"                    ON)        # xzl toggle this 
+option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)       # xzl
+option(GGML_METAL                   "ggml: use Metal"                    OFF)        # xzl toggle this 
 
 option(GGML_CUDA_FORCE_DMMV                 "ggml: use dmmv instead of mmvq CUDA kernels"     OFF)
 option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)
