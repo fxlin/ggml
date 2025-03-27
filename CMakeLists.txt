@@ -25,12 +25,6 @@ endif()
 
 set(BUILD_SHARED_LIBS_DEFAULT OFF)
 
-# xzl  -- VTUNE --
-include_directories("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\include")
-add_compile_definitions(GGML_USE_VTUNE)
-# add_link_options("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\lib64\\libittnotify.lib")
-
-
 # options
 
 option(BUILD_SHARED_LIBS            "ggml: build shared libs" ${BUILD_SHARED_LIBS_DEFAULT})
@@ -47,7 +41,6 @@ option(GGML_BUILD_EXAMPLES          "ggml: build examples" ${GGML_STANDALONE})
 
 option(GGML_TEST_COVERAGE           "ggml: enable test coverage" OFF)
 
-option(GGML_PERF                    "ggml: enable perf timings"          ON)        # xzl  -- turned on 
 option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)      
 option(GGML_PERF                    "ggml: enable perf timings"          ON)        # xzl  -- turned on 
 option(GGML_NO_ACCELERATE           "ggml: disable Accelerate framework" OFF)
@@ -55,7 +48,7 @@ option(GGML_OPENBLAS                "ggml: use OpenBLAS"                 OFF)   
 option(GGML_CLBLAST                 "ggml: use clBLAST"                  OFF)
 option(GGML_HIPBLAS                 "ggml: use hipBLAS"                  OFF)
 option(GGML_CUBLAS                  "ggml: use cuBLAS"                   OFF)
-option(GGML_METAL                   "ggml: use Metal"                    OFF)        # xzl toggle this 
+option(GGML_METAL                   "ggml: use Metal"                    ON)        # xzl toggle this 
 
 option(GGML_CUDA_FORCE_DMMV                 "ggml: use dmmv instead of mmvq CUDA kernels"     OFF)
 option(GGML_CUDA_FORCE_MMQ                  "ggml: use mmq kernels instead of cuBLAS"         OFF)
@@ -65,6 +58,17 @@ option(GGML_CUDA_F16                        "ggml: use 16 bit floats for some ca
 set(GGML_CUDA_KQUANTS_ITER "2" CACHE STRING "ggml: iters./thread per block for Q2_K/Q6_K")
 set(GGML_CUDA_PEER_MAX_BATCH_SIZE "128" CACHE STRING
                                             "ggml: max. batch size for using peer access")
+
+option(GGML_USE_VTUNE                    "ggml: use vtune"          OFF)        # xzl  
+
+
+if (GGML_USE_VTUNE)
+    # xzl  -- VTUNE --
+    include_directories("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\include")
+    add_compile_definitions(GGML_USE_VTUNE)
+    # add_link_options("C:\\Program Files (x86)\\Intel\\oneAPI\\vtune\\latest\\sdk\\lib64\\libittnotify.lib")
+endif()
+
 # sanitizers
 
 if (GGML_SANITIZE_THREAD)
