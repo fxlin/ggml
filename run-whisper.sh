@@ -1,17 +1,42 @@
-# wsl
-WHISPER=`readlink -f build-wsl/bin/whisper`
-cd /mnt/d/workspace-ggml/whisper.cpp/
-${WHISPER} -t 6 -f samples/jfk.wav
+
+# run it like 
+# ./run-whisper.sh 2>&1 | grep "total time"
 
 
+# WHISPER=`readlink -f build-wsl/bin/whisper`
+WHISPER=`readlink -f build/bin/whisper`
 
+# AUDIO=samples/jfk.wav
+AUDIO=samples/bernie4min.wav
+# AUDIO=samples/bernie8min.wav
 
-# windows
-cd e:\workspace-ggml\ggml
+# MODEL=models/ggml-medium.bin
+MODEL=models/ggml-base.en.bin
 
-build-cuda\bin\Release\whisper.exe -f e:\workspace-ggml\whisper.cpp\samples\jfk.wav -m e:\workspace-ggml\whisper.cpp\models\ggml-base.en.bin
+cd ~/workspace-ggml/whisper.cpp/
 
-build-cuda\bin\Release\whisper.exe -f e:\workspace-ggml\whisper.cpp\samples\jfk.wav -m e:\workspace-ggml\whisper.cpp\models\ggml-medium.bin
+cpu() {
+    echo "---- total time cpu ---- "
+    for THR in 1 4 8 12 16  
+    do 
+        ${WHISPER} -t $THR --no-gpu -f $AUDIO --model $MODEL
+    done
+}
 
+gpu() {
+    echo "---- total time gpu ---- "
+    # for THR in 1 4 8 12 16  
+    for THR in 1 
+    do 
+        ${WHISPER} -t $THR -f $AUDIO --model $MODEL -p 1
+    done
+}
 
-build-cuda\bin\Release\whisper.exe -f e:\workspace-ggml\whisper.cpp\samples\hp0.wav -m e:\workspace-ggml\whisper.cpp\models\ggml-base.en.bin
+profile() {
+    xctrace record --template FL-gpu-counters --launch -- \
+    ${WHISPER} -t $THR -f $AUDIO --model $MODEL
+}
+
+# cpu
+ gpu
+# profile
