@@ -1,3 +1,5 @@
+// with some comments added by xzl, 2025, 2024
+
 #include <metal_stdlib>
 
 using namespace metal;
@@ -362,8 +364,10 @@ kernel void kernel_sum_rows(
     dst_row[0] = row_sum;
 }
 
-// xzl: src1 mask-used to marks certain elements. 
+// xzl: src1 mask-used to marks certain elements. (attention mask??
 //      src2 position-based factor? applied to the raw input
+// (2/26/25, chatgpt) suggests liekly mem bw bound: b/c read from src0/1/2
+// and writes to dst. the computation is relatively simple (sum, exp, div)
 kernel void kernel_soft_max(
         device const float * src0,
         device const float * src1,
@@ -377,7 +381,10 @@ kernel void kernel_soft_max(
         constant     float & m0,
         constant     float & m1,
         constant  uint32_t & n_head_log2,
-        threadgroup  float * buf [[threadgroup(0)]],
+        // xzl: buf points to threadgroup addr space,
+        // cf: ggml_metal.m it is passed in like [encoder setThreadgroupMemoryLength:32*sizeof(float) atIndex:0];
+        // 0 is the index of the threadgruop buffer (there can be multiple)
+        threadgroup  float * buf [[threadgroup(0)]],  
         uint  tgpig[[threadgroup_position_in_grid]],
         uint  tpitg[[thread_position_in_threadgroup]],
         uint  sgitg[[simdgroup_index_in_threadgroup]],
@@ -412,10 +419,11 @@ kernel void kernel_soft_max(
     }
 
     // find the max value in the block
-    // xzl: two-level max (leveraging simdgroup, 32-width). note ntg <32*32 (cf GGML_OP_SOFT_MAX ggml-metal.m)
+    // xzl: two-level reduce (leveraging simdgroup, 32-width, N_SIMDWIDTH). note ntg <32*32 (cf GGML_OP_SOFT_MAX ggml-metal.m)
     float max_val = simd_max(lmax);     // xzl: across the simd group... then broadcast... COOL
-    if (ntg > N_SIMDWIDTH) {        // xzl: threagropu has > 1 simd groups...
-        if (sgitg == 0) {
+    // now each simd group is reduced to one max val
+    if (ntg > N_SIMDWIDTH) {        // xzl: if this threagropu has > 1 simd groups...
+        if (sgitg == 0) {   // xzl: threads in the 0th simd group ... clear buf 
             buf[tiisg] = -INFINITY;     // xzl: clear? 
         }
 
@@ -427,6 +435,7 @@ kernel void kernel_soft_max(
 
         threadgroup_barrier(mem_flags::mem_threadgroup);
 
+        // xzl: reduction over buf --> global max
         max_val = buf[tiisg];
         max_val = simd_max(max_val);
     }
@@ -894,6 +903,8 @@ inline float block_q_n_dot_y(device const block_q5_1 * qb_curr, float sumy, thre
     return d * (acc[0] + acc[1]) + sumy * m;
 }
 
+// xzl: 3/6/25. understood 3/5. pretty simliar to q8_0 (kernel_mul_mv_q8_0_f32_impl)
+
 // putting them in the kernel cause a significant performance penalty
 #define N_DST 4        // each SIMD group works on 4 rows
 #define N_SIMDGROUP 2  // number of SIMD groups in a thread group
@@ -935,12 +946,13 @@ void mul_vec_q_n_f32_impl(
     float yl[16]; // src1 vector cache
     float sumf[nr] = {0.f};
 
+    // xzl: ix: idx for quant block (32 quants), shared by two thr, each processing 16 quants (see below
     const int ix = (tiisg/2);
     const int il = (tiisg%2)*8;
 
     device const float * yb = y + ix * QK4_0 + il;
 
-    // each thread in a SIMD group deals with half a block.
+    // each thread in a SIMD group deals with half a block.  (xzl: that's 32/2=16 quants
     for (int ib = ix; ib < nb; ib += nw/2) {
         float sumy = 0;
         for (int i = 0; i < 8; i += 2) {
@@ -1073,8 +1085,27 @@ kernel void kernel_mul_mv_q5_1_f32(
 }
 
 
-#define NB_Q8_0 8
+#define NB_Q8_0 8           // xzl: "each thread in a SIMD group deals with NB_Q8_0 quants at a time"
 
+/* xzl: 3/6/2025 understood about 3/5
+    basic idea is for each simdgrp takes adjaecnet 4 rows from src0, and 1 row from src1. 
+    then a thread processes 8 adjacent quants at a time (stride in an interleaved fashion, for memory coalescing)
+         4 threads sharing one quant block (32 quants)
+     in such a step, a thread does dotproduct over 8 quants (src0) and 8 floats (src1), and accumulate to a thread-local sum (per row), 
+     strides to the next 8 quants, repeat ...
+
+     parallelism rationale: assume src0 is 4096x4096, then the whole kernel has 1K simdgroupsm, i.e. 32K threads. 
+     that should be enough to saturate the GPU (typically thousands of threads on AppleGPU, per chatgpt) 
+     
+     but, given matmul tends to be memory-bw bound, GPU thread residency is less important (vs memory bw
+
+     partition src0 among threads/threadgrps (not src1), b/c src0 is often larger (?) and has more rows? 
+     simdgruop intrinsics used: simdsum
+ 
+ */
+
+// encoder code: [encoder dispatchThreadgroups:MTLSizeMake((ne01 + 7)/8, ne11, ne12*ne13) 
+//                  threadsPerThreadgroup:MTLSizeMake(nth0, nth1, 1)];
 void kernel_mul_mv_q8_0_f32_impl(
         device const  void * src0,
         device const float * src1,
@@ -1091,54 +1122,63 @@ void kernel_mul_mv_q8_0_f32_impl(
         uint3 tgpig[[threadgroup_position_in_grid]],
         uint  tiisg[[thread_index_in_simdgroup]],
         uint  sgitg[[simdgroup_index_in_threadgroup]]) {
-    const int nr  = N_DST;
-    const int nsg = N_SIMDGROUP;
+    const int nr  = N_DST;      // xzl: =4, "each SIMD group works on 4 rows" (rationale??
+    const int nsg = N_SIMDGROUP;        // xzl: # of simdgrups (32) per thrgrp (8,8)
     const int nw  = N_SIMDWIDTH;
 
-    const int nb = ne00/QK8_0;
+    const int nb = ne00/QK8_0;      // xzl: num of quant blocks per src0 row. implies that a quant block spans along row
     const int r0 = tgpig.x;
     const int r1 = tgpig.y;
-    const int im = tgpig.z;
+    const int im = tgpig.z;     // xzl: batch index...?
 
+    // xzl: each threadgroup (8,8) works on 8 rows in src0. each threadgroup has 2 simdgroups (32 thr each)    
+    //   r0 * nsg + sgitg  --- the thread's simdgroup index (x,) 
+    //   first_row: (r0 * nsg + sgitg) * nr  --- the 1st row index in src0 that *this* simdgroup works on
     const int first_row = (r0 * nsg + sgitg) * nr;
 
+    // xzl: bdcast...
     const uint i12 = im%ne12;
     const uint i13 = im/ne12;
 
+    // xzl: offset in src0 for this simdgroup, in terms of quant blocks
     const uint offset0 = first_row * nb + (i12/r2)*(nb*ne01) + (i13/r3)*(nb*ne01*ne02);
 
+    // xzl: "device" memory -- lower level in memory hierarchy
     device const block_q8_0 * x = (device const block_q8_0 *) src0 + offset0;
     device const float      * y = (device const float      *) src1 + r1*ne10 + im*ne00*ne1;
 
-    float yl[NB_Q8_0];
-    float sumf[nr]={0.f};
+    float yl[NB_Q8_0];      // xzl: "src1 vector cache", explicit thread-local cache for src1 (8 floats), which is reused
+    float sumf[nr]={0.f};       // xzl: nb this is a thread's local sums, each for a src0 row (4 rows, hence 4 sum)
 
-    const int ix = tiisg/4;
+    // xzl:?? ix: idx for quant block (32 quants sharing one offset etc)
+    //      split a simdgroup into "sub-simd gruops" (4 thr each).
+    //          each thread:8 quants, 4 thr per sub-simdgrup == 32 quants == a block
+    const int ix = tiisg/4;     
     const int il = tiisg%4;
 
-    device const float * yb = y + ix * QK8_0 + NB_Q8_0*il;
+    device const float * yb = y + ix * QK8_0 + NB_Q8_0*il;      // xzl: base addr in y (src1
 
     // each thread in a SIMD group deals with NB_Q8_0 quants at a time
-    for (int ib = ix; ib < nb; ib += nw/4) {
+    for (int ib = ix; ib < nb; ib += nw/4) {        // xzl: ib: index of quant block
         for (int i = 0; i < NB_Q8_0; ++i) {
-            yl[i] = yb[i];
+            yl[i] = yb[i];      // xzl: load from src1 to this thread's local? for better locality? (but not write back to yb
         }
 
-        for (int row = 0; row < nr; row++) {
+        for (int row = 0; row < nr; row++) {        // xzl: iterate over 4 rows (that are assigned to this simdgroup
             device const int8_t * qs = x[ib+row*nb].qs + NB_Q8_0*il;
-            float sumq = 0.f;
-            for (int iq = 0; iq < NB_Q8_0; ++iq) {
-                sumq += qs[iq] * yl[iq];
+            float sumq = 0.f;       // xzl: a thread processes 8 adjacent quants
+            for (int iq = 0; iq < NB_Q8_0; ++iq) {  // xzl: dotproduct of 8 quants and 8 floats
+                sumq += qs[iq] * yl[iq]; // xzl: qs: device mem, yl: thread-local src1 cache
             }
-            sumf[row] += sumq*x[ib+row*nb].d;
+            sumf[row] += sumq*x[ib+row*nb].d;       // xzl: scale sum by delta (dequant), accumulate to thread-local sum
         }
 
-        yb += NB_Q8_0 * nw;
+        yb += NB_Q8_0 * nw;     // xzl: stride to the next set of fp inputs (y) XXX understand better
     }
 
-    for (int row = 0; row < nr; ++row) {
+    for (int row = 0; row < nr; ++row) {        // xzl: for each row in this simdgroup (nr=4), sun across threads
         const float tot = simd_sum(sumf[row]);
-        if (tiisg == 0 && first_row + row < ne01) {
+        if (tiisg == 0 && first_row + row < ne01) { // xzl: thr 0 in this simdgrup writes to dst
             dst[r1*ne0 + im*ne0*ne1 + first_row + row] = tot;
         }
     }
@@ -1171,20 +1211,29 @@ kernel void kernel_mul_mv_q8_0_f32(
     kernel_mul_mv_q8_0_f32_impl(src0,src1,dst,ne00,ne01,ne02,ne10,ne12,ne0,ne1,r2,r3,tgpig,tiisg,sgitg);
 }
 
-#define N_F32_F32 4         // xzl: each thr group: 4 rows from mat (src1), mul with vec (src0)
+#define N_F32_F32 4         // xzl: each thr group processing 4 rows from src1. this is how src1 is partitioned.
 
-// xzl: matrix-vector mul?? 
-// src0: vec; src1: mat
-// may 2025: understood ~50%
+// xzl: matrix-vec mul
+// this code supports matmat (less efficient than "true" matmat hw accelearted);
+// and matvec is just a special case where ne11=1 (i.e. K=1
+// so both src0/src1 can be matrices
+// 
+// mar 2025: understood 90% except the "batched" dimesion part 
+// feb 2025: understood 70% with help of chatgpt
+// may 2024: understood ~50%; 
+// cf: kernel launch code: ggml-metal.m, around line 1595
+// [encoder dispatchThreadgroups:MTLSizeMake(ne01, ny, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(nth0, nth1, 1)];
+// where threads per thrgroup: 32x1x1 (seems chosen to be a simdgroup. easy to sum up with simd_sum
 void kernel_mul_mv_f32_f32_impl(
-        device const  char * src0,
-        device const  char * src1,
+        device const  char * src0,      // xzl: mat
+        device const  char * src1,      // xzl: mat, but can be vec
         device       float * dst,
-        constant   int64_t & ne00,
-        constant   int64_t & ne01,
+        // xzl: below are tensor memory layout... cf "struct ggml_tensor" def 
+        constant   int64_t & ne00,  // mat: size of dim0 (i.e. # of elements
+        constant   int64_t & ne01,  // mat: size of dim1 ....
         constant   int64_t & ne02,
-        constant  uint64_t & nb00,
-        constant  uint64_t & nb01,
+        constant  uint64_t & nb00,  // mat: size of dim0 (in bytes...
+        constant  uint64_t & nb01,  // mat: size of dim1 (in bytes...
         constant  uint64_t & nb02,
         constant   int64_t & ne10,
         constant   int64_t & ne11,
@@ -1192,44 +1241,58 @@ void kernel_mul_mv_f32_f32_impl(
         constant  uint64_t & nb10,
         constant  uint64_t & nb11,
         constant  uint64_t & nb12,
-        constant   int64_t & ne0,
+        constant   int64_t & ne0,   // xzl: output dimension? why only 2d? 
         constant   int64_t & ne1,
-        constant   uint    & r2,
-        constant   uint    & r3,
+        constant   uint    & r2,        // xzl: batchwise indexing for src0? (bdcast factor?
+        constant   uint    & r3,        // xzl: batchwise indexing for src1?? (bdcast factor?
         uint3 tgpig[[threadgroup_position_in_grid]],
         uint  tiisg[[thread_index_in_simdgroup]]) {
 
-    const int64_t r0 = tgpig.x;
-    const int64_t rb = tgpig.y*N_F32_F32;           // xzl: this thrgroup's row offset into src1 (mat) ?
-    const int64_t im = tgpig.z;
+    // xzl:  partition work among threadgroups... of the grid
+    // each thrgroup handles: a row in src0, a subset of rows in src1
+    const int64_t r0 = tgpig.x;             // xzl: row index in src0 (also in "dst"), i.e. thrgrp "row" index
+    const int64_t rb = tgpig.y*N_F32_F32;           // xzl: this thrgroup's row offset into src1 (each thrgrp has N_F32_F32 rows
+    const int64_t im = tgpig.z;             // xzl: batch index? (= ne12*ne13, see .m code cited above
 
-    const uint i12 = im%ne12;
-    const uint i13 = im/ne12;
+    const uint i12 = im%ne12;       // xzl: ne12: src1 batch size. i12:  offset within a batch, for src1?
+    const uint i13 = im/ne12;       // xzl: batch index for src1? 
 
+    // xzl: this thread's byte offset into src0? (each thrgroup takes one row in src0
+    //      rationale??? reuse a thread's load of src0 row? 
+    // NB r2/r3 are bdcast factors, bdcast src1 over src0
+    // so i12/r2 is like going over & over on src0
     const uint offset0 = r0*nb01 + (i12/r2)*nb02 + (i13/r3)*nb02*ne02;
 
     device const float * x = (device const float *) (src0 + offset0);
 
-    if (ne00 < 128) {
+    if (ne00 < 128) {   // xzl: src0 (mat)'s row is short (i.e. no much to partition among a threadgrp's threads)
+        // xzl: a thread do dotproduct with stride=32 elements in src0/src1's row 
+        // called "memory coalescing", b/c threads in simdgroup can access consecutive memory in one transaction
+        // (nb src1 is transposed. so conceptually it's src1's col
         for (int row = 0; row < N_F32_F32; ++row) {
-            int r1 = rb + row;
+            int r1 = rb + row;      // xzl: row index in src1
             if (r1 >= ne11) {
                 break;
             }
 
             device const float * y = (device const float *) (src1 + r1*nb11 + im*nb12);
 
-            float sumf = 0;
-            for (int i = tiisg; i < ne00; i += 32) {    // xzl: inner product....?
+            // xzl: inner product.... interleaving thread from a thrdgroup (sz=32). cf comments above
+            float sumf = 0; // xzl: sumf is thread-local var
+            for (int i = tiisg; i < ne00; i += 32) {
                 sumf += (float) x[i] * (float) y[i];
             }
 
+            // xzl: simd sum within the thrdgroup (32x1x1), which is also a simdgroup.
+            //      this sum scalar, written to dst, is the dotprod of one row in src0 and one row in src1
             float all_sum = simd_sum(sumf);
-            if (tiisg == 0) {
-                dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;        // xzl: sum and store
+            if (tiisg == 0) {   // xzl: thread 0 of the simdgrp: writes final sum to dst 
+                dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;
             }
-        }
-    } else {
+        } 
+    } else {    // xzl: src0's row is long. simlar idea
+                // except that each thread loads 4 adjacent items (in float4) -- a wider load, pretty much memory opt
+                // (with skip of 32x4 elements) then do dotproduct
         device const float4 * x4 = (device const float4 *)x;
         for (int row = 0; row < N_F32_F32; ++row) {
             int r1 = rb + row;
@@ -1241,12 +1304,14 @@ void kernel_mul_mv_f32_f32_impl(
             device const float4 * y4 = (device const float4 *) y;
 
             float sumf = 0;
+            // xzl: does this assume ne00%4==0?
             for (int i = tiisg; i < ne00/4; i += 32) {
+                // xzl: 4 floats, dotproduct. so there's no intrinsics for this?
                 for (int k = 0; k < 4; ++k) sumf += (float) x4[i][k] * y4[i][k];
             }
 
             float all_sum = simd_sum(sumf);
-            if (tiisg == 0) {
+            if (tiisg == 0) { // xzl: write the final sum to dst's row
                 for (int i = 4*(ne00/4); i < ne00; ++i) all_sum += (float) x[i] * y[i];
                 dst[im*ne1*ne0 + r1*ne0 + r0] = all_sum;
             }
@@ -1360,6 +1425,10 @@ kernel void kernel_mul_mv_f16_f16(
     }
 }
 
+// xzl: cf comments in kernel_mul_mv_f32_f32_impl
+// xzl: weights (src0) in f16, activations (src1) in f32. and there few (<4 rows) in src1
+//  therefore, each threadgrp handles 1 row in src0, and 1 row in src1
+// understood 90% except the bdcast part 3/5/25
 void kernel_mul_mv_f16_f32_1row_impl(
         device const  char * src0,
         device const  char * src1,
@@ -1387,6 +1456,7 @@ void kernel_mul_mv_f16_f32_1row_impl(
     const int64_t r1 = tgpig.y;
     const int64_t im = tgpig.z;
 
+    // xzl: below the bdcast logic is still murky (3/5/25)
     const uint i12 = im%ne12;
     const uint i13 = im/ne12;
 
@@ -1395,6 +1465,7 @@ void kernel_mul_mv_f16_f32_1row_impl(
     device const half  * x = (device const half  *) (src0 + offset0);
     device const float * y = (device const float *) (src1 + r1*nb11 + im*nb12);
 
+    // xzl: nothing diff from kernel_mul_mv_f32_f32_impl? (except lifting src1 to float
     float sumf = 0;
     if (ne00 < 128) {
         for (int i = tiisg; i < ne00; i += 32) {
@@ -1445,7 +1516,7 @@ kernel void kernel_mul_mv_f16_f32_1row(
 }
 
 #define N_F16_F32 4
-
+// xzl: 03/05/25: cf comments in kernel_mul_mv_f32_f32_impl(). quite similar 
 void kernel_mul_mv_f16_f32_impl(
         device const  char * src0,
         device const  char * src1,
@@ -1551,6 +1622,8 @@ kernel void kernel_mul_mv_f16_f32(
 }
 
 // Assumes row size (ne00) is a multiple of 4
+// xzl: cf kernel_mul_mv_f16_f32_1row_impl() comments
+// xzl: each thread: one row in src0 and one row in src1. load 4 elements at a time
 kernel void kernel_mul_mv_f16_f32_l4(
         device const  char * src0,
         device const  char * src1,
@@ -2576,8 +2649,8 @@ typedef struct {
 //====================================== dot products =========================
 
 void kernel_mul_mv_q2_K_f32_impl(
-        device const  void * src0,
-        device const float * src1,
+        device const  void * src0,  // xzl: quantized mat (W), in block_q_2 format (2bit?
+        device const float * src1,  // xzl: vec (X)
         device       float * dst,
         constant   int64_t & ne00,
         constant   int64_t & ne01,
@@ -2595,7 +2668,7 @@ void kernel_mul_mv_q2_K_f32_impl(
     const int nb = ne00/QK_K;
     const int r0 = tgpig.x;
     const int r1 = tgpig.y;
-    const int im = tgpig.z;
+    const int im = tgpig.z;     // xzl: batch index? 
 
     const int first_row = (r0 * N_SIMDGROUP + sgitg) * N_DST;
     const int ib_row = first_row * nb;
@@ -2622,6 +2695,7 @@ void kernel_mul_mv_q2_K_f32_impl(
 
     device const float * y4 = y + ix * QK_K + 128 * iq + 8 * ir;
 
+    // xzl: iterates over blocks of quant matrices....
     for (int ib = ix; ib < nb; ib += 4) {
 
         float4 sumy = {0.f, 0.f, 0.f, 0.f};
@@ -2641,6 +2715,7 @@ void kernel_mul_mv_q2_K_f32_impl(
 
             float4 acc1 = {0.f, 0.f, 0.f, 0.f};
             float4 acc2 = {0.f, 0.f, 0.f, 0.f};
+            // xzl: multiplication. (yl[i] from src1, qs[i/2] quantized value then bitmasked, 
             for (int i = 0; i < 8; i += 2) {
                 acc1[0] += yl[i+ 0] * (qs[i/2] & 0x0003);
                 acc2[0] += yl[i+ 1] * (qs[i/2] & 0x0300);
@@ -2651,6 +2726,7 @@ void kernel_mul_mv_q2_K_f32_impl(
                 acc1[3] += yl[i+24] * (qs[i/2] & 0x00c0);
                 acc2[3] += yl[i+25] * (qs[i/2] & 0xc000);
             }
+            // xzl: below scaling the accmulated results (dequant, dh/sc) .... 
             float dall = dh[0];
             float dmin = dh[1] * 1.f/16.f;
             sumf[row] += dall * ((acc1[0] + 1.f/256.f * acc2[0]) * (sc[0] & 0xF) * 1.f/ 1.f +
@@ -5360,6 +5436,7 @@ kernel void kernel_get_rows_i32(
 }
 
 
+// xzl: feb 2025. 
 // xzl: may 2024 understdood ~70% 
 // xzl: "simdgroup matrix" -- cf shader lang. like, simdgroup_float8x8, 
 //  a block .. 64x32? 
@@ -5402,7 +5479,7 @@ void kernel_mul_mm_impl(device const  uchar * src0,
                         uint                  tiitg[[thread_index_in_threadgroup]],
                         uint                  sgitg[[simdgroup_index_in_threadgroup]]) {
 
-    // xzl: shared_memory cf; ggml-metal.m "[encoder setThreadgroupMemoryLength:8192 atIndex:0];"
+    // xzl: shared_memory cf: ggml-metal.m "[encoder setThreadgroupMemoryLength:8192 atIndex:0];"
     threadgroup half  * sa = (threadgroup half  *)(shared_memory);
     threadgroup float * sb = (threadgroup float *)(shared_memory + 4096);
 

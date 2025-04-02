@@ -650,7 +650,7 @@ struct whisper_kv_cache {
     // computed before each graph build
     uint32_t n = 0;
 
-    std::vector<whisper_kv_cell> cells;     // xzl: size=seq len? (one cell for each seq pos??
+    std::vector<whisper_kv_cell> cells;     // xzl: size=seq len? (one cell for each seq pos??   (only for tracking locations?
 
     struct ggml_tensor * k;         // xzl: monoithic k, v for each kvcache.... ?? preallocated?
     struct ggml_tensor * v;
@@ -2220,6 +2220,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
         // self-attention
         {
+            // fxl: first compute the current step's Q/K, they will participate in comptuation as well as saved in the kv cache
             struct ggml_tensor * Qcur = ggml_mul_mat(ctx0,
                     layer.attn_q_w,
                     cur);
@@ -2247,14 +2248,15 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
                             Vcur,
                             layer.attn_v_b);
 
-                Vcur = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcur, n_state, n_tokens)); //xzl:why reshape V to 2d, while K is 1d
+                Vcur = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcur, n_state, n_tokens)); //xzl:why reshape V to 2d, while K is 1d  (why
 
+                // fxl: k,v -- extracted current kvcache 
                 struct ggml_tensor * k = ggml_view_1d(ctx0, kv_self.k, n_tokens*n_state, (ggml_element_size(kv_self.k)*n_state)*(il*n_ctx + kv_head));
                 struct ggml_tensor * v = ggml_view_2d(ctx0, kv_self.v, n_tokens, n_state,
                         (   n_ctx)*ggml_element_size(kv_self.v),
                         (il*n_ctx)*ggml_element_size(kv_self.v)*n_state + kv_head*ggml_element_size(kv_self.v));
 
-                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k)); // xzl: directly copy to global kv cache
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k)); // xzl: directly copy to global kv cache (does this replace the existing one?  XXX understand better 
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, v));
             }
 
@@ -2265,6 +2267,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
                         ggml_reshape_3d(ctx0, Qcur, n_state/n_head, n_head, n_tokens),
                         0, 2, 1, 3);
 
+            // xzl: below K is loaded from self attn kvcache 
             struct ggml_tensor * K =
                 ggml_view_3d(ctx0, kv_self.k,
                         n_state/n_head, n_kv, n_head,
@@ -2277,11 +2280,13 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
             //struct ggml_tensor * KQ_scaled = ggml_scale(ctx0, KQ, KQ_scale);
 
+            // fxl: thisis not casual masking... just position masking??? 
             //struct ggml_tensor * KQ_masked = ggml_diag_mask_inf(ctx0, KQ, n_past);
             struct ggml_tensor * KQ_masked = ggml_add(ctx0, KQ, KQ_mask);
 
             struct ggml_tensor * KQ_soft_max = ggml_soft_max(ctx0, KQ_masked);
 
+            // fxl: V is loaded from self attn kvcache
             struct ggml_tensor * V =
                 ggml_view_3d(ctx0, kv_self.v,
                         n_kv, n_state/n_head, n_head,
@@ -2326,17 +2331,17 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
         // cross-attention
         {
+            // fxl: first project Q (+ bias, prescale(?))   NB: no KV is needed for cross-attn
             struct ggml_tensor * Qcur = ggml_mul_mat(ctx0,
                     layer.cross_attn_q_w,
-                    cur);
-
+                    cur);                    
             Qcur = ggml_add(ctx0,
                         Qcur,
                         layer.cross_attn_q_b);
 
             Qcur = ggml_scale(ctx0, Qcur, KQscale);
 
-            // Kcross is already scaled         xzl: below extract from kvcache (cross
+            // Kcross is already scaled         xzl: below load from kvcache (cross attn
             struct ggml_tensor * Kcross =
                 ggml_view_3d(ctx0, wstate.kv_cross.k,
                         n_state/n_head, n_audio_ctx, n_head,

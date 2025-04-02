@@ -561,7 +561,7 @@ extern "C" {
         int32_t flags;
 
         struct ggml_tensor * grad;              // xzl: gradients
-        struct ggml_tensor * src[GGML_MAX_SRC];
+        struct ggml_tensor * src[GGML_MAX_SRC];         // xzl: this??
 
         // performance
         int     perf_runs;

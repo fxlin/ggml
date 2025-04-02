@@ -1,3 +1,5 @@
+many comments by fxl.  esp whipser.cpp
+~~~~~~~~~~~~~
 To build
 
 e: 

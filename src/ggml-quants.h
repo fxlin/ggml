@@ -8,7 +8,7 @@
 #include <stddef.h>
 
 // xzl: Q4_0, Q5_1... blocksize for differnt types
-
+//      each quantized int is called a "quant"
 #define QK4_0 32
 typedef struct {
     ggml_fp16_t d;          // delta

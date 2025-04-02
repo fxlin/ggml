@@ -182,7 +182,7 @@ struct ggml_metal_context {
 
     struct ggml_metal_kernel kernels[GGML_METAL_KERNEL_TYPE_COUNT];
 
-    bool support_simdgroup_reduction;
+    bool support_simdgroup_reduction;       // xzl: seems most important support 
     bool support_simdgroup_mm;
 
     bool should_capture_next_compute; // xzl: meaning what
@@ -1299,7 +1299,7 @@ static bool ggml_metal_graph_compute(
                             [encoder dispatchThreadgroups:MTLSizeMake(ne00, ne01, ne02) threadsPerThreadgroup:MTLSizeMake(1, 1, 1)];
                         }
                     } break;
-                case GGML_OP_MUL_MAT:       // xzl: to read in detail TODO:
+                case GGML_OP_MUL_MAT:       // xzl: covers both mat-mat and mat-vec case
                     {
                         GGML_ASSERT(ne00 == ne10);
 
@@ -1307,11 +1307,15 @@ static bool ggml_metal_graph_compute(
                         GGML_ASSERT(ne12 % ne02 == 0);
                         GGML_ASSERT(ne13 % ne03 == 0);
 
-                        const uint r2 = ne12/ne02;      // xzl: brdcast factor? dim2
-                        const uint r3 = ne13/ne03;      // xzl: brdcast factor? dim3
+                        const uint r2 = ne12/ne02;      // xzl: brdcast factor along dim2?
+                        const uint r3 = ne13/ne03;      // xzl: brdcast factor along dim3?
+                        // xzl: for batched mm? ggml seems to assume src0 (weights) will be bdcast into src1 (activations)?
 
                         // find the break-even point where the matrix-matrix kernel becomes more efficient compared
-                        // to the matrix-vector kernel
+                        // to the matrix-vector kernel      
+                        // xzl: ne11: # of elements in dim1, src1. NB it's transposed)
+                        //      so it's basically K, in MxK @ KxN 
+                        //   if ne11_mm_min==1, hence only for K==1 the mat-vec kernel is used (otherwise mat-mat
                         int ne11_mm_min = 1;
 
 #if 0
@@ -1338,6 +1342,7 @@ static bool ggml_metal_graph_compute(
 
                         // for now the matrix-matrix multiplication kernel only works on A14+/M1+ SoCs
                         // AMD GPU and older A-chips will reuse matrix-vector multiplication kernel
+                        // xzl: "fast" path for matmat kernel. 
                         if ([ctx->device supportsFamily:MTLGPUFamilyApple7] &&
                             !ggml_is_transposed(src0) &&
                             !ggml_is_transposed(src1) &&
@@ -1389,17 +1394,18 @@ static bool ggml_metal_graph_compute(
                             [encoder setThreadgroupMemoryLength:8192 atIndex:0];
                             // xzl: note grid size.. partition along dim1? 32 for src1, 64 for src0 
                             [encoder dispatchThreadgroups:MTLSizeMake( (ne11 + 31)/32, (ne01 + 63)/64, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(128, 1, 1)];
-                        } else {
+                        } else {  // xzl: slower path: matmat w/ mat-vec kernel (and dotproduct under the hood
+                            // xzl: below -- threadgroup size (32,1...)
                             int nth0 = 32;
                             int nth1 = 1;
-                            int nrows = 1;
+                            int nrows = 1;          // xzl: # of rows, in src0, processed per thread group?
                             //printf("vector: ne00 = %6d, ne01 = %6d, ne02 = %6d, ne11 = %6d, ne12 = %6d\n", ne00, ne01, ne02, ne11, ne12);
 
                             id<MTLComputePipelineState> pipeline = nil;
 
                             // use custom matrix x vector kernel
-                            switch (src0t) {
-                                case GGML_TYPE_F32:
+                            switch (src0t) { // xzl: src0 (weight) dtype
+                                case GGML_TYPE_F32:     // xzl: checked this
                                     {
                                         GGML_ASSERT(src1t == GGML_TYPE_F32);
                                         pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_MUL_MV_F32_F32].pipeline;
@@ -1411,8 +1417,11 @@ static bool ggml_metal_graph_compute(
                                         nth1 = 1;
                                         if (src1t == GGML_TYPE_F32) {
                                             if (ne11 * ne12 < 4) {
+                                                // xzl: fewer rows in src1
                                                 pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_MUL_MV_F16_F32_1ROW].pipeline;
                                             } else if (ne00 >= 128 && ne01 >= 8 && ne00%4 == 0) {
+                                                // xzl: large enough src0 and can load 4 elements at a time. 
+                                                //   in this case, each thread process 1 row in src0, and all rows in src1
                                                 pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_MUL_MV_F16_F32_L4].pipeline;
                                                 nrows = ne11;
                                             } else {
@@ -1449,7 +1458,7 @@ static bool ggml_metal_graph_compute(
                                         pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_MUL_MV_Q5_1_F32].pipeline;
                                     } break;
                                 case GGML_TYPE_Q8_0:
-                                    {
+                                    {       // xzl: this
                                         nth0 = 8;
                                         nth1 = 8;
                                         pipeline = ctx->kernels[GGML_METAL_KERNEL_TYPE_MUL_MV_Q8_0_F32].pipeline;
@@ -1555,6 +1564,7 @@ static bool ggml_metal_graph_compute(
                             if (src0t == GGML_TYPE_Q4_0 || src0t == GGML_TYPE_Q4_1 ||
                                 src0t == GGML_TYPE_Q5_0 || src0t == GGML_TYPE_Q5_1 || src0t == GGML_TYPE_Q8_0 ||
                                 src0t == GGML_TYPE_Q2_K || src0t == GGML_TYPE_IQ1_S) { // || src0t == GGML_TYPE_Q4_K) {
+                                // xzl: this... q8_0, q4_0 are probably simpler & popular choices
                                 [encoder dispatchThreadgroups:MTLSizeMake((ne01 + 7)/8, ne11, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(nth0, nth1, 1)];
                             }
                             else if (src0t == GGML_TYPE_IQ2_XXS || src0t == GGML_TYPE_IQ2_XS) {
@@ -1587,7 +1597,7 @@ static bool ggml_metal_graph_compute(
                             }
                             else if (src0t == GGML_TYPE_Q6_K) {
                                 [encoder dispatchThreadgroups:MTLSizeMake((ne01 + 1)/2, ne11, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(nth0, nth1, 1)];
-                            } else {
+                            } else { // xzl: understood this 3/5/25.     per thrgroup: 32x1x1, which is also a simdgroup
                                 const int64_t ny = (ne11 + nrows - 1)/nrows;
                                 [encoder dispatchThreadgroups:MTLSizeMake(ne01, ny, ne12*ne13) threadsPerThreadgroup:MTLSizeMake(nth0, nth1, 1)];
                             }

@@ -1,4 +1,5 @@
 //xzl: gen 2--4 dims of matrices, do mul
+// (this seems cpu only (or at least cpu centric), as ggml_graph_compute seems CPU APIs...
 
 // mba m2 Accelerate seems to relaly shine
 // on mba m2, 1024x1500  @ 1024@1024 takes <10ms, 
